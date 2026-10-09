@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JNFAM Qcells PO Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script>
+/* ===================== 배포 설정 / Deployment settings =====================
+   Leave firebase.apiKey empty (or open with ?local=1) to run in LOCAL mode (data in this browser only).
+   Data lives in its own Firestore collections (prefix "qpo_") inside the shared hwq-demand project. */
+window.QPO_CONFIG = {
+  firebase: {
+    apiKey: "AIzaSyA9rk_MsTf2uptvTdCkeT6VXpfsi4h0XxA",
+    authDomain: "hwq-demand.firebaseapp.com",
+    projectId: "hwq-demand",
+    storageBucket: "hwq-demand.firebasestorage.app",
+    messagingSenderId: "228979453814",
+    appId: "1:228979453814:web:7e879de14688abe3755457"
+  },
+  collectionPrefix: "qpo_",
+  // "passcode": shared team password, no login (data path derived from the password; nothing secret in this file)
+  // "m365": Microsoft 365 login with admin/editor/viewer roles
+  authMode: "passcode",
+  msTenant: "9e2f9e87-0f8e-4b71-87d4-c0b36430e0a6",   // JNFAM (jnfam.onmicrosoft.com)
+  adminEmails: ["ytkang@jnfam.onmicrosoft.com"]
+};
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#fff; --surface-2:#f8f9fb; --line:#e4e7ec; --line-2:#eef0f3;
+  --text:#101828; --text-2:#475467; --muted:#98a2b3;
+  --accent:#1c5cab; --accent-d:#104281; --accent-l:#e8f0fb; --navy:#0d2a52;
+  --hf:#2a78d6; --hcl:#eb6834; --hno3:#1baf7a;
+  --good:#0f7b0f; --good-l:#e8f6e8; --warn:#b26b00; --warn-l:#fff4dc; --serious:#c2410c; --bad:#c53030; --bad-l:#fdecec;
+  --st-good:#0ca30c; --st-warn:#fab219; --st-serious:#ec835a; --st-crit:#d03b3b;
+  --r:10px; --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,"Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+#app{display:flex;min-height:100vh}
+.nav{width:224px;flex:none;background:var(--navy);color:#cfd8e6;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;padding:20px 18px 16px}
+.logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#2a78d6,#1c5cab);color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;letter-spacing:.02em}
+.brand-t{font-weight:700;color:#fff;letter-spacing:.01em}
+.brand-s{font-size:12px;color:#8fa3c0}
+#navlinks{display:flex;flex-direction:column;padding:6px 10px;gap:2px;flex:1}
+#navlinks a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;color:#b9c6d9;text-decoration:none;font-weight:500}
+#navlinks a:hover{background:rgba(255,255,255,.06);color:#fff}
+#navlinks a.on{background:rgba(255,255,255,.12);color:#fff}
+#navlinks a .ico{width:18px;text-align:center;opacity:.9}
+#navlinks a .cnt{margin-left:auto;background:#d03b3b;color:#fff;font-size:11px;border-radius:10px;padding:0 7px;font-weight:600}
+.nav-foot{padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:8px}
+.lang-toggle{display:flex;background:rgba(255,255,255,.06);border-radius:8px;padding:2px}
+.lang-toggle button{flex:1;border:0;background:none;padding:5px;border-radius:6px;cursor:pointer;font-size:12px;color:#b9c6d9}
+.lang-toggle button.on{background:#fff;color:var(--text);font-weight:600}
+.light .lang-toggle{background:var(--surface-2);border:1px solid var(--line)} .light .lang-toggle button{color:var(--text-2)} .light .lang-toggle button.on{box-shadow:var(--shadow)}
+.who{font-size:12px;color:#b9c6d9;cursor:pointer}
+.store-mode{font-size:11px;color:#7d91ad}
+main{flex:1;min-width:0;padding:24px 30px 60px}
+.page-h{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.page-h h1{font-size:21px;margin:0;font-weight:700;letter-spacing:-.01em}
+.page-h .sub{color:var(--text-2);font-size:13px}
+.sp{flex:1}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;gap:8px;padding:14px 18px 0;flex-wrap:wrap}
+.card-h h3{margin:0;font-size:14px;font-weight:600}
+.card-h .note{font-size:12px;color:var(--muted)}
+.card-b{padding:14px 18px 18px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.kpi{padding:14px 16px}
+.kpi .l{font-size:12px;color:var(--text-2);font-weight:500}
+.kpi .v{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
+.row2{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:16px}
+.row-eq{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media (max-width:1200px){.kpis{grid-template-columns:repeat(2,1fr)}.row2,.row-eq{grid-template-columns:1fr}}
+@media (max-width:900px){.nav{width:62px}.brand div:last-child,#navlinks a span.t,.nav-foot .who,.store-mode{display:none}.lang-toggle{flex-direction:column}main{padding:18px 14px 50px}}
+/* chem cards */
+.chem-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px}
+.chem{padding:18px;position:relative;overflow:hidden}
+.chem .top{display:flex;align-items:center;gap:10px}
+.chem .tag{font-weight:700;font-size:13px;padding:3px 10px;border-radius:6px;color:#fff}
+.chem .po{font-size:13px;color:var(--text-2)}
+.chem .body{display:grid;grid-template-columns:118px 1fr;gap:16px;align-items:center;margin-top:14px}
+.chem dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13px}
+.chem dt{color:var(--text-2)} .chem dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.chem .alert{margin-top:12px;font-size:12px;padding:8px 10px;border-radius:8px}
+.chem.empty .body{display:block;color:var(--text-2);font-size:13px}
+.delta{font-size:12px;font-weight:600}
+.delta.dn{color:var(--accent)} .delta.up{color:var(--serious)}
+/* tabs */
+.tabs{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:2px}
+.tabs button{border:0;background:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text-2);font-weight:500}
+.tabs button.on{background:#fff;color:var(--text);box-shadow:var(--shadow);font-weight:600}
+/* tables */
+.tbl-wrap{overflow:auto;max-width:100%}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{position:sticky;top:0;background:var(--surface-2);text-align:left;font-weight:600;color:var(--text-2);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+table.t td{padding:8px 10px;border-bottom:1px solid var(--line-2);vertical-align:middle;white-space:nowrap}
+table.t tr:hover td{background:#fafbfc}
+table.t .num{text-align:right;font-variant-numeric:tabular-nums}
+table.t tfoot td{font-weight:700;background:var(--surface-2);border-top:1px solid var(--line)}
+.muted{color:var(--muted)}
+.tbl-scroll{max-height:calc(100vh - 230px);overflow:auto}
+/* badges */
+.b{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap;background:#f2f4f7;color:#344054}
+.b i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.b.good{background:var(--good-l);color:var(--good)} .b.good i{background:var(--st-good)}
+.b.warn{background:var(--warn-l);color:var(--warn)} .b.warn i{background:var(--st-warn)}
+.b.bad{background:var(--bad-l);color:var(--bad)} .b.bad i{background:var(--st-crit)}
+.b.info{background:var(--accent-l);color:var(--accent-d)} .b.info i{background:var(--accent)}
+.b.gray i{background:#98a2b3}
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;padding:7px 13px;border-radius:8px;cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap;text-decoration:none;color:var(--text)}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{background:var(--accent-d)}
+.btn.danger{color:var(--bad);border-color:#f3c4c4}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.inp{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;min-width:0}
+.inp:focus{outline:2px solid var(--accent-l);border-color:var(--accent)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters .inp{height:34px}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;user-select:none}
+.form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 14px}
+.form .f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.form .inp{width:100%}
+.form .f.full{grid-column:1/-1}
+.form label{font-size:12px;color:var(--text-2);font-weight:500}
+.form .hint{font-size:11px;color:var(--muted)}
+.mbg{position:fixed;inset:0;background:rgba(16,24,40,.38);display:flex;align-items:flex-start;justify-content:center;padding:50px 16px;z-index:50;overflow:auto}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:640px;box-shadow:0 20px 50px rgba(0,0,0,.2)}
+.modal-h{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal-h h3{margin:0;font-size:16px}
+.modal-b{padding:18px 20px}
+.modal-f{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--line)}
+.x{border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted);margin-left:auto}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#101828;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.err{background:#b42318}
+.warnbox{background:var(--warn-l);border:1px solid #f5d9a3;color:#7a4a00;padding:10px 12px;border-radius:8px;font-size:13px}
+.errbox{background:var(--bad-l);border:1px solid #f3c4c4;color:#8a1f1f;padding:10px 12px;border-radius:8px;font-size:13px}
+.infobox{background:var(--accent-l);border:1px solid #c8daf3;color:var(--accent-d);padding:10px 12px;border-radius:8px;font-size:13px}
+.empty-st{padding:40px 20px;text-align:center;color:var(--text-2)}
+#gate{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:80}
+.gate-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:34px 36px;max-width:420px;width:100%;text-align:center;box-shadow:var(--shadow)}
+.gate-card h2{margin:0 0 8px;font-size:19px} .gate-card p{color:var(--text-2);font-size:13px;margin:0 0 20px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* chart */
+svg.ch{display:block;width:100%;height:auto;overflow:visible}
+svg.ch text{font-family:Inter,"Noto Sans KR",sans-serif}
+svg.ch text.halo{paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+.hit{fill:transparent;cursor:crosshair}
+#tip{position:fixed;pointer-events:none;background:#101828;color:#fff;font-size:12px;padding:8px 10px;border-radius:8px;z-index:90;box-shadow:0 6px 18px rgba(0,0,0,.18);line-height:1.5;display:none;max-width:280px}
+#tip b{font-weight:600}
+.leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--text-2);margin-top:8px}
+.leg span{display:inline-flex;align-items:center;gap:6px}
+.leg i{display:inline-block;width:14px;height:0;border-top:2px solid}
+.leg i.dash{border-top-style:dashed}
+.leg i.box{height:10px;border:0;border-radius:2px;width:10px}
+/* ============ REPORT (paper) ============ */
+.rep-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.rep-wrap{display:flex;gap:18px;align-items:flex-start}
+.rep-side{width:280px;flex:none;position:sticky;top:20px}
+.rep-side textarea{width:100%;min-height:130px;resize:vertical}
+@media (max-width:1300px){.rep-wrap{flex-direction:column}.rep-side{width:100%;position:static}}
+.paper-scroll{overflow:auto;max-width:100%;flex:1}
+.paper{width:820px;background:#fff;margin:0 auto;box-shadow:0 2px 14px rgba(16,24,40,.12);color:#101828;font-size:12.5px;line-height:1.5}
+.pg{padding:34px 40px 30px;position:relative}
+.pg + .pg{border-top:1px dashed #d0d5dd}
+.r-head{display:flex;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:3px solid var(--navy)}
+.r-head .co{font-weight:800;font-size:15px;color:var(--navy);letter-spacing:.02em}
+.r-head .co small{display:block;font-weight:500;font-size:11px;color:var(--text-2);letter-spacing:0}
+.r-head .ttl{margin-left:auto;text-align:right}
+.r-head .ttl h1{margin:0;font-size:20px;letter-spacing:-.01em;color:var(--navy)}
+.r-head .ttl div{font-size:11.5px;color:var(--text-2)}
+.r-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:8px;margin:14px 0 16px;overflow:hidden}
+.r-meta div{padding:8px 12px;border-right:1px solid var(--line)} .r-meta div:last-child{border-right:0}
+.r-meta label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.r-meta b{font-size:12.5px}
+.r-sec{margin-top:18px;break-inside:avoid}
+.r-sec h2{font-size:13px;margin:0 0 8px;color:var(--navy);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+.r-sec h2::before{content:"";width:4px;height:14px;background:var(--accent);border-radius:2px}
+.r-sum{background:#f6f9fd;border:1px solid #dbe6f5;border-radius:8px;padding:12px 14px;font-size:12.5px;color:#1d2939}
+.r-sum p{margin:0 0 6px} .r-sum p:last-child{margin:0}
+.r-chemhd{display:flex;align-items:center;gap:10px;margin:22px 0 10px;padding:9px 12px;background:#f8f9fb;border-radius:8px;border-left:4px solid}
+.r-chemhd b{font-size:14px} .r-chemhd span{color:var(--text-2);font-size:12px}
+.r-chemhd .b{margin-left:auto}
+.r-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.r-kpi{border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.r-kpi label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:600}
+.r-kpi .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:2px}
+.r-kpi .v small{font-size:11px;font-weight:600;color:var(--text-2);margin-left:3px}
+.r-kpi .s{font-size:11px;color:var(--text-2)}
+.r-kpi.hl{background:var(--navy);border-color:var(--navy);color:#fff} .r-kpi.hl label,.r-kpi.hl .s,.r-kpi.hl .v small{color:#b9c8de}
+.r-chart{border:1px solid var(--line);border-radius:8px;padding:12px 14px 8px}
+.r-chart .ct{display:flex;align-items:baseline;gap:8px;font-weight:600;font-size:12.5px;margin-bottom:4px}
+.r-chart .ct span{font-weight:400;color:var(--text-2);font-size:11px}
+table.rt{width:100%;border-collapse:collapse;font-size:11.5px}
+table.rt th{background:var(--navy);color:#fff;font-weight:600;text-align:left;padding:6px 8px;font-size:10.5px;letter-spacing:.02em;white-space:nowrap}
+table.rt td{padding:6px 8px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+table.rt tr:nth-child(even) td{background:#fafbfc}
+table.rt .num{text-align:right;font-variant-numeric:tabular-nums}
+table.rt tfoot td{font-weight:700;border-top:1.5px solid var(--navy);background:#fff}
+.r-foot{display:flex;justify-content:space-between;margin-top:22px;padding-top:10px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+.r-notes{border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;min-height:40px}
+.pbar{position:relative;height:30px;border-radius:6px;background:#eef0f3;display:flex;overflow:hidden;gap:2px}
+.pbar div{height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden}
+.pbar-leg{display:flex;justify-content:space-between;font-size:11px;color:var(--text-2);margin-top:5px;font-variant-numeric:tabular-nums}
+@media print{
+  @page{size:A4 portrait;margin:9mm}
+  body{background:#fff}
+  .nav,.rep-bar,.rep-side,.page-h,#tip,.toast{display:none!important}
+  main{padding:0}
+  .paper{box-shadow:none;width:100%;margin:0}
+  .paper-scroll{overflow:visible}
+  .pg{padding:0 0 0}
+  .pg + .pg{border-top:0;break-before:page}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <nav class="nav">
+    <div class="brand"><div class="logo">QPO</div><div><div class="brand-t">Qcells PO</div><div class="brand-s">JNF AM · PO Manager</div></div></div>
+    <div id="navlinks"></div>
+    <div class="nav-foot">
+      <div class="lang-toggle" id="langT"><button data-lang="ko">한국어</button><button data-lang="en">English</button></div>
+      <div class="who" id="who"></div>
+      <div class="store-mode" id="storeMode"></div>
+    </div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div id="tip"></div>
+<script>
+'use strict';
+/* ================= utils ================= */
+const CFG = window.QPO_CONFIG || {};
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const num = v => { if (v === '' || v == null) return null; const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[,$\s]/g, '')); return isFinite(n) ? n : null; };
+const N = v => num(v) || 0;
+const r2 = v => Math.round(v * 100) / 100;
+const fmt = (v, d = 0) => v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const money = v => v == null ? '–' : '$' + fmt(v, 2);
+const pct = (v, d = 1) => v == null || !isFinite(v) ? '–' : (v * 100).toFixed(d) + '%';
+const fmtK = v => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(v % 1e6 ? 1 : 0) + 'M' : Math.abs(v) >= 1e3 ? Math.round(v / 1e3) + 'K' : String(Math.round(v));
+/* dates: always ISO 'YYYY-MM-DD', math in UTC */
+const toD = s => new Date(s + 'T00:00:00Z');
+const iso = d => d.toISOString().slice(0, 10);
+const addDays = (s, n) => iso(new Date(toD(s).getTime() + n * 864e5));
+const diffDays = (a, b) => Math.round((toD(a) - toD(b)) / 864e5);
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fd(s, L = LANG, short = false) {
+  if (!s) return '–'; const d = toD(s); const y = d.getUTCFullYear(), m = d.getUTCMonth(), dd = d.getUTCDate();
+  if (L === 'ko') return short ? `${m + 1}/${dd}` : `${y}.${String(m + 1).padStart(2, '0')}.${String(dd).padStart(2, '0')}`;
+  return short ? `${MON[m]} ${dd}` : `${MON[m]} ${dd}, ${y}`;
+}
+function toast(msg, err) { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 5000 : 2400); }
+function loadScript(src) { return new Promise((res, rej) => { if ($(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('load failed: ' + src)); document.head.appendChild(s); }); }
+const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const H2C_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+
+/* ================= i18n ================= */
+let LANG = (() => { try { return localStorage.getItem('qpo_lang') || 'ko'; } catch { return 'ko'; } })();
+const I = {
+  dash: ['Dashboard', '대시보드'], report: ['Weekly Report', '주간 보고서'], pos: ['PO Master', 'PO 마스터'], deliv: ['Deliveries', '납품 내역'], history: ['Report History', '보고 이력'], settings: ['Settings', '설정'], users: ['Users & roles', '사용자·권한'],
+  chem: ['Chemical', '화학약품'], poNo: ['PO#', 'PO#'], seq: ['Seq.', '순번'], type: ['PO type', 'PO 유형'], recv: ['PO received', 'PO 수령일'], qty: ['PO qty (kg)', '발주수량 (kg)'], price: ['Unit price (USD/kg)', '단가 (USD/kg)'], carry: ['Carry-over delivered (kg)', '기존 납품 이월 (kg)'], tt: ['T/T (days)', 'T/T 조건 (일)'], note: ['Note', '비고'], manual: ['Manual status', '수동 상태'],
+  poAmt: ['PO amount', 'PO 금액'], delivered: ['Delivered', '납품누계'], remaining: ['Remaining', '잔여수량'], progress: ['Progress', '진행률'], remAmt: ['Remaining $', '잔여금액'], unpaid: ['Unpaid billed', '미수 청구'], next: ['Next PO', '후속 PO#'], status: ['Status', '상태'],
+  invoice: ['JNF Invoice', 'JNF Invoice'], invDate: ['Invoice date', 'Invoice 요청일'], kg: ['Qty (kg)', '수량 (kg)'], amount: ['Amount', '금액'], adj: ['Adj.', '조정'], billed: ['Billed', '청구금액'], received: ['Received USD', '수령금액 USD'], diff: ['Diff', '입금 차이'], delDate: ['Delivery date', '납품일'], due: ['Due date', '입금 예정일'], settle: ['Payment', '정산 상태'], check: ['PO check', 'PO 잔량 체크'],
+  add: ['Add', '추가'], addPO: ['New PO', 'PO 등록'], addDel: ['New delivery', '납품 등록'], edit: ['Edit', '수정'], del: ['Delete', '삭제'], save: ['Save', '저장'], cancel: ['Cancel', '취소'], confirmDel: ['Delete this item?', '삭제할까요?'], savedT: ['Saved', '저장했습니다'], noPerm: ['No permission', '권한이 없습니다'],
+  all: ['All', '전체'], search: ['Search…', '검색…'], total: ['TOTAL', '합계'],
+  st_manual: ['', ''], st_noqty: ['Qty needed', '수량 입력 필요'], st_rolled: ['Rolled over', 'Rolled over'], st_exhausted: ['Exhausted — next PO needed', '소진 — 후속 PO 필요'], st_wait: ['Queued', '대기 (이전 PO 진행중)'], st_near: ['Near completion', '소진 임박'], st_active: ['In progress', '진행중'], st_nopo: ['PO# pending', 'PO# 미입력'],
+  pay_done: ['Paid', '완료'], pay_open: ['Unpaid', '미수'], pay_over: ['Overpaid', '과입금'], pay_short: ['Short paid', '부족입금'], pay_overdue: ['Overdue', '연체'],
+  chk_ok: ['OK', 'OK'], chk_over: ['Exceeds PO — split to next PO', 'PO 수량 초과 — 후속 PO로 분할'], chk_nopo: ['PO# not in master', 'PO 마스터에 없는 PO#'],
+  activeRem: ['Active PO remaining', '활성 PO 잔여수량'], activeRemAmt: ['Active PO remaining $', '활성 PO 잔여금액'], unpaidBilled: ['Unpaid billed', '미수 청구'], overdue: ['Overdue', '연체'], thisWeek: ['This week', '이번 주'],
+  noActive: ['No active PO', '활성 PO 없음'], noActiveSub: ['Register the next PO in PO Master when received.', '신규 PO 받으면 PO 마스터에 다음 순번으로 등록'],
+  runRate: ['Run rate', '주간 평균'], estDone: ['Est. completion', '예상 소진일'], wow: ['vs last week', '전주 대비'], trigger: ['New PO trigger', '신규 PO 요청 기준'], triggerDate: ['Request next PO by', '신규 PO 요청 시점'],
+  burn: ['PO burndown & forecast', 'PO 잔량 추이 및 소진 예측'], weekly: ['Weekly deliveries', '주간 납품량'], alerts: ['Alerts', '알림'], noAlerts: ['No alerts', '알림 없음'], arPanel: ['Payments (AR)', '입금 현황 (AR)'],
+  weekEnding: ['Week ending', '주 마감일'], repLang: ['Report language', '보고서 언어'], showPrice: ['Show amounts (USD)', '금액(USD) 표시'], showPay: ['Show payment status', '입금 현황 표시'], notes: ['Remarks for customer', '고객 전달 사항'],
+  print: ['Print / Save PDF', '인쇄 / PDF 저장'], png: ['Download image (PNG)', '이미지 저장 (PNG)'], copyTxt: ['Copy email summary', '이메일 요약 복사'], issue: ['Mark as issued', '보고 완료로 기록'], issued: ['Issued', '보고 완료'], copied: ['Copied to clipboard', '클립보드에 복사했습니다'],
+  importX: ['Import Excel', '엑셀 가져오기'], exportX: ['Export Excel', '엑셀 내보내기'], importConfirm: ['Replace all POs and deliveries with the Excel data?', 'PO와 납품 내역 전체를 엑셀 데이터로 바꿀까요?'], imported: ['Imported', '가져왔습니다'],
+  s_close: ['Exhausted at remaining ≤ (kg)', '소진 판정 잔량 (kg)'], s_near: ['Near-completion alert ≤ (kg)', '소진 임박 알림 (kg)'], s_tol: ['Payment tolerance ($)', '입금 차이 허용 ($)'], s_trig: ['New PO request trigger (kg)', '신규 PO 요청 기준 (kg)'], s_tt: ['Default T/T (days)', 'T/T 기본값 (일)'], s_we: ['Week ends on', '주 마감 요일'], s_rate: ['Forecast basis', '예상 소진일 계산 기준'], s_cust: ['Customer name (report)', '고객명 (보고서)'], s_co: ['Company name (report)', '회사명 (보고서)'], s_by: ['Prepared by', '작성자'], s_contact: ['Contact (email / phone)', '연락처'],
+  r_w4: ['Last 4-week average', '최근 4주 평균'], r_w8: ['Last 8-week average', '최근 8주 평균'], r_all: ['Since PO start average', 'PO 시작 이후 평균'],
+  loading: ['Loading…', '불러오는 중…'], signIn: ['Sign in with Microsoft 365', 'Microsoft 365 계정으로 로그인'], signOut: ['Sign out', '로그아웃'], gateTitle: ['JNFAM Qcells PO Manager', 'JNFAM Qcells PO 관리'], gateSub: ['Sign in with your company Microsoft account.', '회사 Microsoft 계정으로 로그인하세요.'], pending: ['Access requested', '접근 권한 요청됨'], pendingSub: ['The administrator will approve your request.', '관리자가 승인하면 사용할 수 있습니다.'], disabled: ['Account disabled', '사용 중지된 계정'],
+  role: ['Role', '권한'], role_admin: ['Admin', '관리자'], role_editor: ['Editor', '담당자'], role_viewer: ['Viewer', '조회자'], requests: ['Access requests', '접근 요청'], approve: ['Approve', '승인'], dismiss: ['Dismiss', '거절'], email: ['Email', '이메일'], name: ['Name', '이름'], active: ['Active', '사용'], lastLogin: ['Last login', '최근 로그인'], lastAdmin: ['At least one active admin is required.', '활성 관리자가 최소 1명 필요합니다.'],
+  local: ['Local mode · this browser only', '로컬 모드 · 이 브라우저에만 저장'], online: ['Online · Firebase', '온라인 · Firebase'],
+  open: ['Open', '열기'], none: ['None', '없음'], emptyData: ['No data yet. Import the Excel file in Settings or add a PO.', '데이터가 없습니다. 설정에서 엑셀을 가져오거나 PO를 등록하세요.'],
+};
+const t = k => (I[k] || [k, k])[LANG === 'ko' ? 1 : 0];
+function setLang(l) { LANG = l; try { localStorage.setItem('qpo_lang', l); } catch { } document.documentElement.lang = l; render(); }
+
+/* ================= state & store ================= */
+let CP = CFG.collectionPrefix ?? 'qpo_';
+const PASS_MODE = (CFG.authMode || 'passcode') === 'passcode';
+const COLS = ['pos', 'deliveries', 'settings', 'reports'];
+const S = { pos: [], deliveries: [], settings: [], reports: [] };
+const DEF_SET = { id: 'main', closeQty: 0, nearQty: 37500, payTol: 0.05, trig: { HF: 180000, HCl: null, HNO3: null }, ttDefault: 30, weekEnd: 5, rate: 'w4', customer: 'Hanwha Qcells USA Corp.', company: 'JNF AM LLC', preparedBy: '', contact: '', chems: ['HF', 'HCl', 'HNO3'], types: ['Mass Production', 'Commissioning', 'Sample'], manuals: ['Closed', 'Cancelled', 'Hold'] };
+const SET = () => ({ ...DEF_SET, ...(S.settings.find(s => s.id === 'main') || {}) });
+const LocalStore = {
+  key: 'qpo_local_v1',
+  async init() { try { const d = JSON.parse(localStorage.getItem(this.key) || '{}'); COLS.forEach(c => S[c] = d[c] || []); } catch { } },
+  persist() { try { localStorage.setItem(this.key, JSON.stringify(S)); } catch (e) { toast(e.message, true); } },
+  async put(col, doc) { if (!doc.id) doc.id = uid(); const i = S[col].findIndex(x => x.id === doc.id); if (i >= 0) S[col][i] = doc; else S[col].push(doc); this.persist(); render(); return doc; },
+  async putMany(col, docs) { docs.forEach(d => { if (!d.id) d.id = uid(); const i = S[col].findIndex(x => x.id === d.id); if (i >= 0) S[col][i] = d; else S[col].push(d); }); this.persist(); render(); },
+  async del(col, id) { S[col] = S[col].filter(x => x.id !== id); this.persist(); render(); },
+  async clear(col) { S[col] = []; this.persist(); },
+  stop() { }
+};
+const CloudStore = {
+  unsub: [],
+  init() {
+    this.db = firebase.firestore();
+    return Promise.all(COLS.map(c => new Promise((res, rej) => {
+      let first = true;
+      this.unsub.push(this.db.collection(CP + c).onSnapshot(snap => { S[c] = snap.docs.map(d => d.data()); if (first) { first = false; res(); } else scheduleRender(); }, e => { first ? rej(e) : toast(e.message, true); }));
+    })));
+  },
+  clean(d) { return JSON.parse(JSON.stringify(d)); },
+  async put(col, doc) { if (!doc.id) doc.id = uid(); const d = this.clean({ ...doc, updatedAt: new Date().toISOString(), updatedBy: AUTH.email }); await this.db.collection(CP + col).doc(String(d.id)).set(d); return d; },
+  async putMany(col, docs) { for (let i = 0; i < docs.length; i += 400) { const b = this.db.batch(); docs.slice(i, i + 400).forEach(d => { if (!d.id) d.id = uid(); b.set(this.db.collection(CP + col).doc(String(d.id)), this.clean(d)); }); await b.commit(); } },
+  async del(col, id) { await this.db.collection(CP + col).doc(String(id)).delete(); },
+  async clear(col) { const snap = await this.db.collection(CP + col).get(); for (let i = 0; i < snap.docs.length; i += 400) { const b = this.db.batch(); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); } },
+  stop() { this.unsub.forEach(u => u()); this.unsub = []; }
+};
+let Store = LocalStore;
+let _rt = null; function scheduleRender() { clearTimeout(_rt); _rt = setTimeout(render, 60); }
+
+/* ================= core calculations (mirror of the Excel formulas) ================= */
+const CHEM_COLOR = { HF: '#2a78d6', HCl: '#eb6834', HNO3: '#1baf7a' };
+const chemColor = c => CHEM_COLOR[c] || '#4a3aa7';
+const weekEndOf = s => { const we = SET().weekEnd; const d = toD(s).getUTCDay(); return addDays(s, (we - d + 7) % 7); };
+const poByNo = no => S.pos.find(p => p.poNo && String(p.poNo).trim() === String(no || '').trim());
+const dDate = d => d.delDate || d.invDate || '';
+const sortedPOs = () => [...S.pos].sort((a, b) => (SET().chems.indexOf(a.chem) - SET().chems.indexOf(b.chem)) || (N(a.seq) - N(b.seq)));
+const delsOf = (poNo, upto) => S.deliveries.filter(d => d.poNo && String(d.poNo).trim() === String(poNo).trim() && (!upto || (dDate(d) && dDate(d) <= upto)));
+function delCalc(d) {
+  const po = poByNo(d.poNo), set = SET();
+  const price = po ? num(po.price) : null;
+  const amount = price != null && num(d.qty) != null ? r2(N(d.qty) * price) : null;
+  const billed = amount == null ? null : r2(amount + N(d.adj));
+  const rcv = num(d.received);
+  const diff = billed != null && rcv != null ? r2(rcv - billed) : null;
+  const tt = po && N(po.tt) ? N(po.tt) : set.ttDefault;
+  const due = d.invDate && po ? addDays(d.invDate, tt) : '';
+  let pay = '';
+  if (billed != null) pay = rcv == null ? (due && due < todayISO() ? 'overdue' : 'open') : Math.abs(diff) <= set.payTol ? 'done' : diff > 0 ? 'over' : 'short';
+  let chk = 'ok';
+  if (!po) chk = 'nopo';
+  else {
+    const prior = S.deliveries.filter(x => x.poNo === d.poNo && (dDate(x) < dDate(d) || (dDate(x) === dDate(d) && (x.invoice || '') <= (d.invoice || ''))));
+    if (N(po.carry) + prior.reduce((s, x) => s + N(x.qty), 0) > N(po.qty) + set.closeQty) chk = 'over';
+  }
+  return { po, chem: po?.chem || '', price, amount, billed, rcv, diff, due, pay, chk };
+}
+function poCalc(po, upto) {
+  const set = SET();
+  const ds = po.poNo ? delsOf(po.poNo, upto) : [];
+  const qty = num(po.qty), price = num(po.price);
+  const delivered = po.poNo ? N(po.carry) + ds.reduce((s, d) => s + N(d.qty), 0) : 0;
+  const delAmt = r2(N(po.carry) * N(price) + ds.reduce((s, d) => s + N(delCalc(d).amount), 0));
+  const poAmt = qty != null && price != null ? r2(qty * price) : null;
+  const rem = qty != null && po.poNo ? qty - delivered : null;
+  const prog = qty ? delivered / qty : null;
+  const remAmt = poAmt != null && po.poNo ? r2(poAmt - delAmt) : null;
+  const unpaid = ds.reduce((s, d) => { const c = delCalc(d); return s + (c.billed != null && c.rcv == null ? c.billed : 0); }, 0);
+  const next = S.pos.find(p => p.chem === po.chem && N(p.seq) === N(po.seq) + 1);
+  const prev = S.pos.find(p => p.chem === po.chem && N(p.seq) === N(po.seq) - 1);
+  const prevRem = prev ? poCalc0(prev, upto) : null;
+  let st;
+  if (!po.poNo) st = 'nopo';
+  else if (po.manual) st = 'manual';
+  else if (qty == null) st = 'noqty';
+  else if (rem <= set.closeQty) st = next && next.poNo ? 'rolled' : 'exhausted';
+  else if (delivered === 0 && prevRem != null && prevRem > set.closeQty) st = 'wait';
+  else if (rem <= set.nearQty) st = 'near';
+  else st = 'active';
+  const isActive = !!po.poNo && !po.manual && rem != null && rem > set.closeQty;
+  return { qty, price, delivered, delAmt, poAmt, rem, prog, remAmt, unpaid, next, st, isActive };
+}
+function poCalc0(po, upto) { if (!po.poNo || num(po.qty) == null) return null; return N(po.qty) - N(po.carry) - delsOf(po.poNo, upto).reduce((s, d) => s + N(d.qty), 0); }
+function stBadge(po, c) {
+  const m = { active: 'good', near: 'warn', exhausted: 'bad', rolled: 'info', wait: 'gray', noqty: 'gray', nopo: 'gray', manual: 'gray' };
+  const label = c.st === 'manual' ? po.manual : c.st === 'rolled' ? `${t('st_rolled')} → ${c.next?.poNo || ''}` : t('st_' + c.st);
+  return `<span class="b ${m[c.st]}"><i></i>${esc(label)}</span>`;
+}
+function activePO(chem, upto) { return sortedPOs().filter(p => p.chem === chem && p.poNo).find(p => poCalc(p, upto).isActive) || null; }
+function chemWeek(chem, we) { const from = addDays(we, -6); return S.deliveries.filter(d => { const c = poByNo(d.poNo); const dt = dDate(d); return c && c.chem === chem && dt >= from && dt <= we; }).reduce((s, d) => s + N(d.qty), 0); }
+function chemFirstDel(chem) { return S.deliveries.filter(d => poByNo(d.poNo)?.chem === chem && dDate(d)).map(dDate).sort()[0] || null; }
+/* average weekly volume over the last n complete weeks ending at `we` (weeks before the first delivery are skipped) */
+function runRate(chem, we, n) {
+  const first = chemFirstDel(chem); if (!first) return 0;
+  const fw = weekEndOf(first); const weeks = [];
+  for (let w = we, i = 0; (n === 'all' || i < n) && w >= fw; w = addDays(w, -7), i++) weeks.push(w);
+  if (!weeks.length) return 0;
+  return weeks.reduce((s, w) => s + chemWeek(chem, w), 0) / weeks.length;
+}
+function forecast(po, asOf) {
+  const set = SET(); const we = weekEndOf(asOf); const c = poCalc(po, asOf);
+  const rates = { w4: runRate(po.chem, we, 4), w8: runRate(po.chem, we, 8), all: runRate(po.chem, we, 'all') };
+  const rate = rates[set.rate] || rates.w4;
+  const dateAt = (remQty, r) => r > 0 && remQty > 0 ? addDays(asOf, Math.ceil(remQty / r * 7)) : null;
+  const rem = Math.max(0, c.rem || 0);
+  const alt = [rates.w4, rates.w8].filter(x => x > 0);
+  const done = dateAt(rem, rate);
+  const early = alt.length ? dateAt(rem, Math.max(...alt, rate)) : done;
+  const late = alt.length ? dateAt(rem, Math.min(...alt, rate)) : done;
+  const trig = num((set.trig || {})[po.chem]);
+  const trigDate = trig != null ? (rem <= trig ? asOf : dateAt(rem - trig, rate)) : null;
+  const weeksLeft = rate > 0 ? rem / rate : null;
+  return { rate, rates, done, early, late, trig, trigDate, weeksLeft };
+}
+/* week-over-week, both measured at week ends */
+function wow(po, we) {
+  const prevWe = addDays(we, -7);
+  const cur = poCalc(po, we), prev = poCalc(po, prevWe);
+  const wk = chemWeekPO(po, we), wkPrev = chemWeekPO(po, prevWe);
+  return {
+    rem: cur.rem, remPrev: prev.rem, remChg: prev.rem ? (cur.rem - prev.rem) / prev.rem : null,
+    remPct: cur.qty ? cur.rem / cur.qty : null, remPctPrev: prev.qty ? prev.rem / prev.qty : null,
+    wk, wkPrev, wkChg: wkPrev ? (wk - wkPrev) / wkPrev : null, cur, prev
+  };
+}
+function chemWeekPO(po, we) { const from = addDays(we, -6); return delsOf(po.poNo, we).filter(d => dDate(d) >= from).reduce((s, d) => s + N(d.qty), 0); }
+function poWeekSeries(po, asOf) {
+  const ds = delsOf(po.poNo, asOf).filter(d => dDate(d)).map(dDate).sort();
+  const startRef = ds[0] || po.recv || asOf;
+  let w = addDays(weekEndOf(startRef), -7);
+  const pts = [{ d: w, rem: N(po.qty) - N(po.carry), wk: 0 }];
+  for (w = addDays(w, 7); w < asOf; w = addDays(w, 7)) pts.push({ d: w, rem: poCalc0(po, w), wk: chemWeekPO(po, w) });
+  pts.push({ d: asOf, rem: poCalc0(po, asOf), wk: chemWeekPO(po, weekEndOf(asOf)) });
+  return pts;
+}
+
+/* ================= SVG charts ================= */
+function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+function ticks(max, n = 4) { const st = niceMax(max / n); const out = []; for (let v = 0; v <= max + 1e-9; v += st) out.push(v); return out; }
+const tipAttr = html => `data-tip="${esc(html)}"`;
+function burndownSVG(po, asOf, L = LANG, opt = {}) {
+  const W = opt.w || 760, H = opt.h || 290, m = { l: 52, r: 18, t: 26, b: 30 };
+  const col = chemColor(po.chem), set = SET();
+  const pts = poWeekSeries(po, asOf), fc = forecast(po, asOf), c = poCalc(po, asOf);
+  const qty = N(po.qty);
+  const lastRem = pts[pts.length - 1].rem;
+  const xEnd = (() => { let e = fc.late || fc.done || addDays(asOf, 28); const cap = addDays(asOf, 26 * 7); if (e > cap) e = cap; return addDays(e, 7); })();
+  const x0 = pts[0].d, span = Math.max(14, diffDays(xEnd, x0));
+  const X = d => m.l + (diffDays(d, x0) / span) * (W - m.l - m.r);
+  const ymax = niceMax(qty * 1.02);
+  const Y = v => m.t + (1 - v / ymax) * (H - m.t - m.b);
+  let g = '';
+  ticks(ymax).forEach(v => { g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef0f3"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="10.5" fill="#667085">${fmtK(v)}</text>`; });
+  /* x ticks: every 2 weeks (or 4 when long) */
+  const step = span > 160 ? 28 : 14;
+  for (let d = x0; d <= xEnd; d = addDays(d, step)) g += `<text x="${X(d)}" y="${H - m.b + 17}" text-anchor="middle" font-size="10.5" fill="#667085">${fd(d, L, true)}</text><line x1="${X(d)}" x2="${X(d)}" y1="${H - m.b}" y2="${H - m.b + 4}" stroke="#d0d5dd"/>`;
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#98a2b3"/>`;
+  /* PO qty reference */
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(qty)}" y2="${Y(qty)}" stroke="#98a2b3" stroke-dasharray="2 3"/><text x="${W - m.r}" y="${Y(qty) - 5}" text-anchor="end" font-size="10.5" fill="#475467">${L === 'ko' ? 'PO 수량' : 'PO qty'} ${fmt(qty)} kg</text>`;
+  /* new-PO trigger */
+  if (fc.trig != null && fc.trig > 0 && fc.trig < ymax && !opt.hideTrig && !(po.poNo && poCalc(po, asOf).next?.poNo)) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(fc.trig)}" y2="${Y(fc.trig)}" stroke="#d08a00" stroke-dasharray="6 4" stroke-width="1.2"/><text class="halo" x="${m.l + 6}" y="${Y(fc.trig) - 5}" font-size="10.5" fill="#9a6200">${L === 'ko' ? '신규 PO 요청 기준' : 'Next-PO trigger'} ${fmtK(fc.trig)}</text>`;
+  /* forecast band + line */
+  if (fc.done && lastRem > 0) {
+    const cl = d => d > addDays(xEnd, -7) ? addDays(xEnd, -7) : d;
+    if (fc.early && fc.late && fc.early !== fc.late) g += `<polygon points="${X(asOf)},${Y(lastRem)} ${X(cl(fc.early))},${Y(0)} ${X(cl(fc.late))},${Y(0)}" fill="${col}" opacity=".13"/>`;
+    g += `<line x1="${X(asOf)}" y1="${Y(lastRem)}" x2="${X(cl(fc.done))}" y2="${Y(0)}" stroke="${col}" stroke-width="2" stroke-dasharray="6 5"/>`;
+    g += `<circle cx="${X(cl(fc.done))}" cy="${Y(0)}" r="5" fill="#fff" stroke="${col}" stroke-width="2"/>`;
+    const lx = X(cl(fc.done)); const anchor = lx > W - 120 ? 'end' : 'middle';
+    g += `<text class="halo" x="${lx}" y="${Y(0) - 12}" text-anchor="${anchor}" font-size="11" font-weight="700" fill="#101828">${L === 'ko' ? '예상 완료' : 'Est. completion'} ${fd(fc.done, L, true)}</text>`;
+  }
+  /* as-of marker */
+  g += `<line x1="${X(asOf)}" x2="${X(asOf)}" y1="${m.t - 8}" y2="${Y(0)}" stroke="#344054" stroke-dasharray="2 2"/><text x="${X(asOf)}" y="${m.t - 12}" text-anchor="middle" font-size="10.5" font-weight="600" fill="#344054">${fd(asOf, L, true)}</text>`;
+  /* actual area + line */
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.d).toFixed(1)},${Y(p.rem).toFixed(1)}`).join('');
+  g += `<path d="${path}L${X(asOf)},${Y(0)}L${X(x0)},${Y(0)}Z" fill="${col}" opacity=".08"/>`;
+  g += `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.25" stroke-linejoin="round"/>`;
+  pts.forEach((p, i) => { g += `<circle cx="${X(p.d)}" cy="${Y(p.rem)}" r="${i === pts.length - 1 ? 5 : 3.5}" fill="${col}" stroke="#fff" stroke-width="2"/>`; });
+  const lp = pts[pts.length - 1];
+  g += `<text class="halo" x="${X(lp.d) + 10}" y="${Y(lp.rem) - 22}" font-size="11.5" font-weight="700" fill="#101828">${fmt(lp.rem)} kg</text><text class="halo" x="${X(lp.d) + 10}" y="${Y(lp.rem) - 9}" font-size="10.5" fill="#475467">${pct(c.qty ? lp.rem / c.qty : null)} ${L === 'ko' ? '잔여' : 'left'}</text>`;
+  /* hover */
+  const colW = (W - m.l - m.r) / Math.max(1, span / 7);
+  pts.forEach(p => { const tip = `<b>${L === 'ko' ? '주 마감' : 'Week ending'} ${fd(p.d, L)}</b><br>${L === 'ko' ? '주간 납품' : 'Delivered'}: ${fmt(p.wk)} kg<br>${L === 'ko' ? '잔여' : 'Remaining'}: ${fmt(p.rem)} kg (${pct(qty ? p.rem / qty : null)})`; g += `<rect class="hit" x="${X(p.d) - colW / 2}" y="${m.t}" width="${colW}" height="${H - m.t - m.b}" ${tipAttr(tip)}/>`; });
+  if (fc.done) g += `<circle class="hit" cx="${X(fc.done > addDays(xEnd, -7) ? addDays(xEnd, -7) : fc.done)}" cy="${Y(0)}" r="12" ${tipAttr(`<b>${L === 'ko' ? '예상 완료' : 'Est. completion'}: ${fd(fc.done, L)}</b><br>${L === 'ko' ? '범위' : 'Range'}: ${fd(fc.early, L)} – ${fd(fc.late, L)}<br>${L === 'ko' ? '주간 평균' : 'Run rate'}: ${fmt(fc.rate)} kg/wk`)}/>`;
+  return `<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="burndown">${g}</svg>`;
+}
+function burnLegend(po, L = LANG, noTrig = false) {
+  const col = chemColor(po.chem), fc = forecast(po, todayISO());
+  return `<div class="leg"><span><i style="border-color:${col}"></i>${L === 'ko' ? '실제 잔여수량' : 'Actual remaining'}</span><span><i class="dash" style="border-color:${col}"></i>${L === 'ko' ? '예측' : 'Forecast'}</span><span><i class="box" style="background:${col};opacity:.25"></i>${L === 'ko' ? '예측 범위 (4·8주 평균)' : 'Forecast range (4/8-wk avg)'}</span>${fc.trig && !noTrig && !poCalc(po, todayISO()).next?.poNo ? `<span><i class="dash" style="border-color:#d08a00"></i>${L === 'ko' ? '신규 PO 요청 기준' : 'Next-PO trigger'}</span>` : ''}</div>`;
+}
+function weeklySVG(chem, asOfWe, L = LANG, opt = {}) {
+  const W = opt.w || 760, H = opt.h || 230, m = { l: 52, r: 74, t: 24, b: 30 };
+  const col = chemColor(chem), set = SET();
+  const first = chemFirstDel(chem); if (!first) return `<div class="empty-st">${L === 'ko' ? '납품 내역 없음' : 'No deliveries'}</div>`;
+  const fw = weekEndOf(first); const nW = opt.weeks || 12; const weeks = [];
+  for (let w = asOfWe, i = 0; i < nW && w >= fw; w = addDays(w, -7), i++) weeks.unshift({ d: w, v: chemWeek(chem, w) });
+  const nAvg = set.rate === 'w8' ? 8 : set.rate === 'all' ? weeks.length : 4;
+  const avg = runRate(chem, asOfWe, set.rate === 'all' ? 'all' : nAvg);
+  const ymax = niceMax(Math.max(avg, ...weeks.map(w => w.v)) * 1.12);
+  const Y = v => m.t + (1 - v / ymax) * (H - m.t - m.b);
+  const bw = Math.min(78, (W - m.l - m.r) / weeks.length), gap = Math.min(18, bw * .32); const x0 = m.l + ((W - m.l - m.r) - bw * weeks.length) / 2;
+  let g = '';
+  ticks(ymax).forEach(v => { g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef0f3"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="10.5" fill="#667085">${fmtK(v)}</text>`; });
+  weeks.forEach((w, i) => {
+    const x = x0 + i * bw + gap / 2, h = Y(0) - Y(w.v), cur = w.d === asOfWe;
+    if (w.v > 0) g += `<path d="M${x},${Y(0)}V${Y(w.v) + Math.min(4, h)}q0,-4 4,-4H${x + bw - gap - 4}q4,0 4,4V${Y(0)}Z" fill="${col}" opacity="${cur ? 1 : .42}"/>`;
+    g += `<text x="${x + (bw - gap) / 2}" y="${Y(w.v) - 6}" text-anchor="middle" font-size="10.5" font-weight="${cur ? 700 : 500}" fill="${cur ? '#101828' : '#475467'}">${w.v ? fmtK(w.v) : '0'}</text>`;
+    g += `<text x="${x + (bw - gap) / 2}" y="${H - m.b + 17}" text-anchor="middle" font-size="10.5" fill="${cur ? '#101828' : '#667085'}" font-weight="${cur ? 600 : 400}">${fd(w.d, L, true)}</text>`;
+    g += `<rect class="hit" x="${x0 + i * bw}" y="${m.t}" width="${bw}" height="${H - m.t - m.b}" ${tipAttr(`<b>${L === 'ko' ? '주 마감' : 'Week ending'} ${fd(w.d, L)}</b><br>${chem}: ${fmt(w.v)} kg`)}/>`;
+  });
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#98a2b3"/>`;
+  if (avg > 0) {
+    const k = Math.min(weeks.length, nAvg), xs = x0 + (weeks.length - k) * bw + 2;
+    g += `<line x1="${xs}" x2="${W - m.r + 6}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#101828" stroke-dasharray="5 4" stroke-width="1.3"/><text x="${W - m.r + 10}" y="${Y(avg) - 3}" font-size="10.5" font-weight="600" fill="#101828">${L === 'ko' ? `${set.rate === 'all' ? '전체' : nAvg + '주'} 평균` : `${set.rate === 'all' ? 'Overall' : nAvg + '-wk'} avg`}</text><text x="${W - m.r + 10}" y="${Y(avg) + 11}" font-size="10.5" fill="#475467">${fmt(avg)}</text>`;
+  }
+  return `<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="weekly deliveries">${g}</svg>`;
+}
+function ringSVG(p, col, size = 112, label = '') {
+  const r = size / 2 - 9, C = 2 * Math.PI * r, v = Math.max(0, Math.min(1, p || 0));
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#eef0f3" stroke-width="11"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C * v} ${C}" transform="rotate(-90 ${size / 2} ${size / 2})"/><text x="50%" y="48%" text-anchor="middle" font-size="20" font-weight="700" fill="#101828" font-family="Inter">${Math.round(v * 100)}%</text><text x="50%" y="64%" text-anchor="middle" font-size="10.5" fill="#667085">${esc(label)}</text></svg>`;
+}
+/* tooltip */
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest && e.target.closest('[data-tip]'); const tip = $('#tip');
+  if (!el) { tip.style.display = 'none'; return; }
+  tip.innerHTML = el.getAttribute('data-tip'); tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+
+/* ================= navigation & render ================= */
+const ROUTES = [['dash', '◧'], ['report', '▤'], ['pos', '☰'], ['deliv', '⇄'], ['history', '⟲'], ['settings', '⚙']];
+const route = () => { const h = (location.hash || '#dash').slice(1); const [p, q] = h.split('?'); return { p: p || 'dash', q: new URLSearchParams(q || '') }; };
+window.addEventListener('hashchange', () => render());
+function renderNav() {
+  const { p } = route();
+  const nAlerts = alertsList().length;
+  const items = [...ROUTES]; if (CLOUD && !PASS_MODE && can('admin')) items.push(['users', '☺']);
+  $('#navlinks').innerHTML = items.map(([k, ic]) => `<a href="#${k}" class="${p === k ? 'on' : ''}"><span class="ico">${ic}</span><span class="t">${t(k)}</span>${k === 'dash' && nAlerts ? `<span class="cnt">${nAlerts}</span>` : ''}${k === 'users' && ADM.requests.length ? `<span class="cnt">${ADM.requests.length}</span>` : ''}</a>`).join('');
+  $$('#langT button').forEach(b => { b.classList.toggle('on', b.dataset.lang === LANG); b.onclick = () => setLang(b.dataset.lang); });
+  $('#who').textContent = CLOUD ? (PASS_MODE ? `${AUTH.name ? AUTH.name + ' · ' : ''}🔒 ${LANG === 'ko' ? '잠그기' : 'Lock'}` : `${AUTH.name || AUTH.email} · ${t('role_' + AUTH.role)}`) : '';
+  $('#who').onclick = CLOUD ? () => { if (PASS_MODE) { if (confirm(LANG === 'ko' ? '이 브라우저에서 잠글까요? 다시 쓰려면 비밀번호가 필요합니다.' : 'Lock this browser? The password will be needed again.')) passLock(); } else if (confirm(t('signOut') + '?')) signOut(); } : null;
+  $('#storeMode').textContent = CLOUD ? t('online') : t('local');
+}
+function render() {
+  if (CLOUD && AUTH.status !== 'ok') return;
+  renderNav();
+  const { p, q } = route();
+  const v = { dash: viewDash, report: viewReport, pos: viewPOs, deliv: viewDeliv, history: viewHistory, settings: viewSettings, users: viewUsers }[p] || viewDash;
+  const keepScroll = window.scrollY;
+  $('#main').innerHTML = v(q);
+  (AFTER[p] || (() => { }))(q);
+  if (keepScroll && RERENDER) window.scrollTo(0, keepScroll); RERENDER = false;
+}
+let RERENDER = false; const AFTER = {};
+const pageHead = (title, sub = '', right = '') => `<div class="page-h"><h1>${title}</h1>${sub ? `<span class="sub">${sub}</span>` : ''}<span class="sp"></span>${right}</div>`;
+
+/* ================= alerts ================= */
+function alertsList() {
+  const out = [], set = SET(), today = todayISO();
+  set.chems.forEach(ch => {
+    const po = activePO(ch, today);
+    const hasPOs = S.pos.some(p => p.chem === ch && p.poNo);
+    if (!po) { if (hasPOs || S.pos.some(p => p.chem === ch)) out.push({ lv: 'bad', ch, msg: LANG === 'ko' ? `${ch}: 활성 PO 없음 — 신규 PO 필요` : `${ch}: no active PO — new PO needed` }); return; }
+    const c = poCalc(po, today), fc = forecast(po, today);
+    const hasNext = c.next && c.next.poNo;
+    if (c.rem < 0) out.push({ lv: 'bad', ch, msg: LANG === 'ko' ? `${ch} ${po.poNo}: 초과납품 ${fmt(-c.rem)} kg` : `${ch} ${po.poNo}: over-delivered ${fmt(-c.rem)} kg` });
+    if (!hasNext && fc.trig != null && c.rem <= fc.trig) out.push({ lv: 'warn', ch, msg: LANG === 'ko' ? `${ch}: 잔여 ${fmt(c.rem)} kg ≤ 기준 ${fmt(fc.trig)} kg → Qcells에 신규 PO 요청` : `${ch}: remaining ${fmt(c.rem)} kg ≤ trigger ${fmt(fc.trig)} kg → request next PO from Qcells` });
+    else if (!hasNext && fc.trigDate && diffDays(fc.trigDate, today) <= 14) out.push({ lv: 'warn', ch, msg: LANG === 'ko' ? `${ch}: ${fd(fc.trigDate)}경 신규 PO 요청 기준 도달 예상` : `${ch}: next-PO trigger expected around ${fd(fc.trigDate)}` });
+    if (c.st === 'near' && !hasNext) out.push({ lv: 'warn', ch, msg: LANG === 'ko' ? `${ch} ${po.poNo}: 소진 임박 (잔여 ${fmt(c.rem)} kg)` : `${ch} ${po.poNo}: near completion (${fmt(c.rem)} kg left)` });
+  });
+  const od = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'overdue');
+  if (od.length) out.push({ lv: 'bad', msg: LANG === 'ko' ? `연체 입금 ${od.length}건 · ${money(od.reduce((s, x) => s + x.c.billed, 0))}` : `${od.length} overdue payment(s) · ${money(od.reduce((s, x) => s + x.c.billed, 0))}` });
+  const bad = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'over' || x.c.pay === 'short');
+  if (bad.length) out.push({ lv: 'warn', msg: LANG === 'ko' ? `입금 차이 ${bad.length}건` : `${bad.length} payment difference(s)` });
+  const chk = S.deliveries.filter(d => delCalc(d).chk !== 'ok');
+  if (chk.length) out.push({ lv: 'bad', msg: LANG === 'ko' ? `PO 잔량 체크 오류 ${chk.length}건 (납품 내역 확인)` : `${chk.length} delivery PO check issue(s)` });
+  return out;
+}
+
+/* ================= Dashboard ================= */
+let DASH_CHEM = null;
+function viewDash() {
+  if (!S.pos.length) return pageHead(t('dash')) + `<div class="card empty-st">${t('emptyData')}<div style="margin-top:14px"><a class="btn pri" href="#settings">${t('importX')}</a></div></div>`;
+  const set = SET(), today = todayISO(), we = weekEndOf(today);
+  const actives = set.chems.map(ch => ({ ch, po: activePO(ch, today) }));
+  const remKg = actives.reduce((s, a) => s + (a.po ? poCalc(a.po, today).rem : 0), 0);
+  const remAmt = actives.reduce((s, a) => s + (a.po ? N(poCalc(a.po, today).remAmt) : 0), 0);
+  const dc = S.deliveries.map(d => delCalc(d));
+  const unpaid = dc.filter(c => c.pay === 'open' || c.pay === 'overdue').reduce((s, c) => s + c.billed, 0);
+  const overdue = dc.filter(c => c.pay === 'overdue');
+  const wkTot = set.chems.reduce((s, ch) => s + chemWeek(ch, we), 0), wkPrev = set.chems.reduce((s, ch) => s + chemWeek(ch, addDays(we, -7)), 0);
+  let h = pageHead(t('dash'), `${LANG === 'ko' ? '기준일' : 'As of'} ${fd(today)} · ${LANG === 'ko' ? '주 마감' : 'week ending'} ${fd(we)}`, `<a class="btn pri" href="#report">▤ ${t('report')}</a>`);
+  h += `<div class="kpis">
+    <div class="card kpi"><div class="l">${t('activeRem')}</div><div class="v">${fmt(remKg)} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${money(remAmt)}</div></div>
+    <div class="card kpi"><div class="l">${t('thisWeek')} ${LANG === 'ko' ? '납품' : 'deliveries'}</div><div class="v">${fmt(wkTot)} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${wkPrev ? `${t('wow')} ${deltaTxt((wkTot - wkPrev) / wkPrev, true)}` : '&nbsp;'}</div></div>
+    <div class="card kpi"><div class="l">${t('unpaidBilled')}</div><div class="v">${money(unpaid)}</div><div class="s">${dc.filter(c => c.pay === 'open' || c.pay === 'overdue').length} ${LANG === 'ko' ? '건' : 'invoices'}</div></div>
+    <div class="card kpi"><div class="l">${t('overdue')}</div><div class="v" style="color:${overdue.length ? 'var(--bad)' : 'inherit'}">${money(overdue.reduce((s, c) => s + c.billed, 0))}</div><div class="s">${overdue.length} ${LANG === 'ko' ? '건' : 'invoices'}</div></div>
+  </div>`;
+  h += `<div class="chem-grid">${actives.map(a => chemCard(a.ch, a.po, today)).join('')}</div>`;
+  const chemsWithPO = actives.filter(a => a.po).map(a => a.ch);
+  if (!DASH_CHEM || !chemsWithPO.includes(DASH_CHEM)) DASH_CHEM = chemsWithPO[0] || null;
+  if (DASH_CHEM) {
+    const po = activePO(DASH_CHEM, today);
+    h += `<div class="row2"><div class="card"><div class="card-h"><h3>${t('burn')}</h3><span class="note">${esc(DASH_CHEM)} · PO ${esc(po.poNo)}</span><span class="sp"></span>${chemsWithPO.length > 1 ? `<div class="tabs">${chemsWithPO.map(c => `<button data-chem="${c}" class="${c === DASH_CHEM ? 'on' : ''}">${c}</button>`).join('')}</div>` : ''}</div><div class="card-b">${burndownSVG(po, today)}${burnLegend(po)}</div></div>
+      <div class="card"><div class="card-h"><h3>${t('weekly')}</h3><span class="note">${esc(DASH_CHEM)} · kg</span></div><div class="card-b">${weeklySVG(DASH_CHEM, we, LANG, { h: 300, w: 520 })}</div></div></div>`;
+  }
+  const al = alertsList();
+  h += `<div class="row-eq"><div class="card"><div class="card-h"><h3>${t('alerts')}</h3></div><div class="card-b">${al.length ? al.map(a => `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line-2);font-size:13px"><span class="b ${a.lv}"><i></i>${a.lv === 'bad' ? (LANG === 'ko' ? '조치' : 'Action') : (LANG === 'ko' ? '주의' : 'Watch')}</span><span>${esc(a.msg)}</span></div>`).join('') : `<div class="muted">${t('noAlerts')}</div>`}</div></div>
+    <div class="card"><div class="card-h"><h3>${t('arPanel')}</h3><span class="sp"></span><a class="btn sm" href="#deliv">${t('deliv')} →</a></div><div class="card-b" style="padding-top:8px"><div class="tbl-wrap"><table class="t"><thead><tr><th>${t('invoice')}</th><th class="num">${t('billed')}</th><th>${t('due')}</th><th>${t('settle')}</th></tr></thead><tbody>
+    ${S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'open' || x.c.pay === 'overdue').sort((a, b) => (a.c.due || '').localeCompare(b.c.due || '')).slice(0, 8).map(x => `<tr><td>${esc(x.d.invoice)}</td><td class="num">${money(x.c.billed)}</td><td>${fd(x.c.due)}</td><td>${payBadge(x.c.pay)}</td></tr>`).join('') || `<tr><td colspan="4" class="muted">${t('none')}</td></tr>`}
+    </tbody></table></div></div></div></div>`;
+  h += `<div class="card"><div class="card-h"><h3>${LANG === 'ko' ? '전체 PO 현황' : 'All POs'}</h3><span class="sp"></span><a class="btn sm" href="#pos">${t('pos')} →</a></div><div class="card-b" style="padding-top:8px">${poTable(true)}</div></div>`;
+  return h;
+}
+AFTER.dash = () => { $$('.tabs button[data-chem]').forEach(b => b.onclick = () => { DASH_CHEM = b.dataset.chem; RERENDER = true; render(); }); };
+function deltaTxt(v, volume) { if (v == null || !isFinite(v)) return '–'; const s = v > 0 ? '▲' : v < 0 ? '▼' : '■'; const cls = volume ? '' : (v < 0 ? 'dn' : 'up'); return `<span class="delta ${cls}">${s} ${Math.abs(v * 100).toFixed(1)}%</span>`; }
+function payBadge(p) { const m = { done: 'good', open: 'info', overdue: 'bad', over: 'warn', short: 'warn' }; return p ? `<span class="b ${m[p]}"><i></i>${t('pay_' + p)}</span>` : ''; }
+function chemCard(ch, po, today) {
+  const col = chemColor(ch);
+  if (!po) {
+    const waiting = S.pos.filter(p => p.chem === ch && !p.poNo && N(p.qty));
+    return `<div class="card chem empty"><div class="top"><span class="tag" style="background:${col}">${ch}</span><span class="po">${t('noActive')}</span><span class="sp"></span><span class="b bad"><i></i>${LANG === 'ko' ? '후속 PO 필요' : 'Next PO needed'}</span></div><div class="body" style="margin-top:14px">${t('noActiveSub')}${waiting.length ? `<div class="infobox" style="margin-top:10px">${LANG === 'ko' ? 'PO# 미입력 예정 PO' : 'Planned PO without PO#'}: ${waiting.map(w => `${fmt(N(w.qty))} kg @ $${w.price ?? '–'}`).join(', ')}</div>` : ''}</div></div>`;
+  }
+  const c = poCalc(po, today), fc = forecast(po, today), we = weekEndOf(today), w = wow(po, we);
+  const hasNext = c.next && c.next.poNo;
+  let alert = '';
+  if (!hasNext && fc.trig != null) alert = c.rem <= fc.trig ? `<div class="alert warnbox">⚠ ${LANG === 'ko' ? `잔여 ${fmt(c.rem)} kg — 신규 PO 요청 기준(${fmt(fc.trig)} kg) 도달` : `Remaining at or below trigger (${fmt(fc.trig)} kg) — request next PO`}</div>` : fc.trigDate ? `<div class="alert infobox">${t('triggerDate')}: <b>${fd(fc.trigDate)}</b> (${fmt(fc.trig)} kg)</div>` : '';
+  if (hasNext) alert = `<div class="alert infobox">${t('next')}: <b>${esc(c.next.poNo)}</b> · ${fmt(N(c.next.qty))} kg</div>`;
+  return `<div class="card chem"><div class="top"><span class="tag" style="background:${col}">${ch}</span><span class="po">PO <b>${esc(po.poNo)}</b> · ${esc(po.type || '')}</span><span class="sp"></span>${stBadge(po, c)}</div>
+    <div class="body">${ringSVG(c.prog, col, 112, LANG === 'ko' ? '납품 완료' : 'delivered')}
+    <dl><dt>${t('qty')}</dt><dd>${fmt(c.qty)}</dd><dt>${t('remaining')}</dt><dd>${fmt(c.rem)} kg <span class="muted" style="font-weight:500">(${pct(c.rem / c.qty)})</span></dd>
+    <dt>${t('wow')}</dt><dd>${deltaTxt(w.remChg)}</dd><dt>${t('runRate')}</dt><dd>${fmt(fc.rate)} kg/wk</dd>
+    <dt>${t('estDone')}</dt><dd style="color:var(--accent-d)">${fd(fc.done)}</dd><dt></dt><dd class="muted" style="font-weight:400;font-size:12px">${fc.early && fc.late && fc.early !== fc.late ? `${fd(fc.early, LANG, true)} – ${fd(fc.late, LANG, true)}` : ''}</dd></dl></div>${alert}</div>`;
+}
+
+/* ================= PO Master ================= */
+function poTable(compact) {
+  const today = todayISO();
+  const rows = sortedPOs().map(p => ({ p, c: poCalc(p, today) }));
+  return `<div class="tbl-wrap"><table class="t"><thead><tr><th>${t('chem')}</th>${compact ? '' : `<th>${t('seq')}</th>`}<th>${t('poNo')}</th><th>${t('type')}</th>${compact ? '' : `<th>${t('recv')}</th>`}<th class="num">${t('qty')}</th>${compact ? '' : `<th class="num">${LANG === 'ko' ? '단가' : 'Price'}</th>`}<th class="num">${t('delivered')}</th><th class="num">${t('remaining')}</th><th>${t('progress')}</th><th class="num">${t('remAmt')}</th>${compact ? '' : `<th class="num">${t('unpaid')}</th><th>${t('tt')}</th>`}<th>${t('status')}</th>${compact || !can('edit') ? '' : '<th></th>'}</tr></thead><tbody>
+  ${rows.map(({ p, c }) => `<tr><td><span class="b" style="background:${chemColor(p.chem)}1a;color:${chemColor(p.chem)}">${esc(p.chem)}</span></td>${compact ? '' : `<td>${esc(p.seq)}</td>`}<td><b>${esc(p.poNo || '—')}</b></td><td>${esc(p.type || '')}</td>${compact ? '' : `<td>${fd(p.recv)}</td>`}<td class="num">${fmt(c.qty)}</td>${compact ? '' : `<td class="num">${c.price != null ? '$' + c.price : '–'}</td>`}<td class="num">${fmt(c.delivered)}</td><td class="num"><b>${fmt(c.rem)}</b></td>
+  <td style="min-width:120px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:7px;background:#eef0f3;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100, (c.prog || 0) * 100)}%;background:${chemColor(p.chem)}"></div></div><span class="muted" style="font-size:12px;width:40px;text-align:right">${c.prog != null ? pct(c.prog, 0) : ''}</span></div></td>
+  <td class="num">${c.remAmt != null ? money(c.remAmt) : '–'}</td>${compact ? '' : `<td class="num">${c.unpaid ? money(c.unpaid) : ''}</td><td>${esc(p.tt || '')}</td>`}<td>${stBadge(p, c)}</td>${compact || !can('edit') ? '' : `<td style="white-space:nowrap"><button class="btn sm" data-act="editPO" data-id="${p.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delPO" data-id="${p.id}">${t('del')}</button></td>`}</tr>`).join('') || `<tr><td colspan="14" class="muted">${t('none')}</td></tr>`}
+  </tbody></table></div>`;
+}
+function viewPOs() {
+  return pageHead(t('pos'), LANG === 'ko' ? '약품별 순번 1,2,3… 순서로 소진 → 잔량이 소진 판정 잔량 이하가 되면 다음 순번으로 Roll over' : 'Consumed in sequence per chemical; rolls over to the next sequence when exhausted', can('edit') ? `<button class="btn pri" data-act="editPO">＋ ${t('addPO')}</button>` : '') + `<div class="card"><div class="card-b">${poTable(false)}</div></div>`;
+}
+function poForm(p) {
+  const set = SET(); p = p || { chem: set.chems[0], seq: '', type: set.types[0] };
+  const nextSeq = ch => Math.max(0, ...S.pos.filter(x => x.chem === ch).map(x => N(x.seq))) + 1;
+  if (!p.id && !p.seq) p.seq = nextSeq(p.chem);
+  modal(p.id ? t('edit') + ' PO' : t('addPO'), `<div class="form">
+    <div class="f"><label>${t('chem')}</label><select class="inp" id="pChem">${set.chems.map(c => `<option ${p.chem === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+    <div class="f"><label>${t('seq')}</label><input class="inp" id="pSeq" type="number" min="1" value="${esc(p.seq)}"></div>
+    <div class="f"><label>${t('poNo')}</label><input class="inp" id="pNo" value="${esc(p.poNo || '')}" placeholder="7600009240"></div>
+    <div class="f"><label>${t('type')}</label><select class="inp" id="pType">${set.types.map(c => `<option ${p.type === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+    <div class="f"><label>${t('recv')}</label><input class="inp" id="pRecv" type="date" value="${esc(p.recv || '')}"></div>
+    <div class="f"><label>${t('qty')}</label><input class="inp" id="pQty" inputmode="decimal" value="${esc(p.qty ?? '')}"></div>
+    <div class="f"><label>${t('price')}</label><input class="inp" id="pPrice" inputmode="decimal" value="${esc(p.price ?? '')}"></div>
+    <div class="f"><label>${t('carry')}</label><input class="inp" id="pCarry" inputmode="decimal" value="${esc(p.carry ?? 0)}"></div>
+    <div class="f"><label>${t('tt')}</label><input class="inp" id="pTT" type="number" value="${esc(p.tt ?? '')}" placeholder="${set.ttDefault}"></div>
+    <div class="f"><label>${t('manual')}</label><select class="inp" id="pMan"><option value="">—</option>${set.manuals.map(c => `<option ${p.manual === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+    <div class="f full"><label>${t('note')}</label><input class="inp" id="pNote" value="${esc(p.note || '')}"></div></div>`, async () => {
+    const d = { ...p, chem: $('#pChem').value, seq: N($('#pSeq').value), poNo: $('#pNo').value.trim(), type: $('#pType').value, recv: $('#pRecv').value, qty: num($('#pQty').value), price: num($('#pPrice').value), carry: N($('#pCarry').value), tt: num($('#pTT').value), manual: $('#pMan').value, note: $('#pNote').value.trim() };
+    if (d.poNo && S.pos.some(x => x.id !== d.id && x.poNo === d.poNo)) return toast(LANG === 'ko' ? '이미 등록된 PO#입니다' : 'PO# already exists', true), false;
+    if (S.pos.some(x => x.id !== d.id && x.chem === d.chem && N(x.seq) === d.seq)) return toast(LANG === 'ko' ? '같은 약품에 같은 순번이 있습니다' : 'Sequence already used for this chemical', true), false;
+    await Store.put('pos', d); toast(t('savedT'));
+  });
+  $('#pChem').onchange = () => { if (!p.id) $('#pSeq').value = nextSeq($('#pChem').value); };
+}
+
+/* ================= Deliveries ================= */
+let DF = { q: '', chem: '', pay: '' };
+function viewDeliv() {
+  const rows = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(({ d, c }) => (!DF.chem || c.chem === DF.chem) && (!DF.pay || c.pay === DF.pay) && (!DF.q || `${d.invoice} ${d.poNo} ${d.note}`.toLowerCase().includes(DF.q.toLowerCase()))).sort((a, b) => dDate(b.d).localeCompare(dDate(a.d)) || (b.d.invoice || '').localeCompare(a.d.invoice || ''));
+  const sum = k => rows.reduce((s, r) => s + N(r.c[k]), 0);
+  let h = pageHead(t('deliv'), LANG === 'ko' ? 'PO 잔량을 넘는 납품은 두 줄로 나눠 (기존 PO 잔량 / 후속 PO) 입력' : 'Split a delivery that exceeds the PO balance into two lines', can('edit') ? `<button class="btn pri" data-act="editDel">＋ ${t('addDel')}</button>` : '');
+  h += `<div class="filters"><input class="inp" id="dfQ" placeholder="${t('search')}" value="${esc(DF.q)}" style="width:220px"><select class="inp" id="dfChem"><option value="">${t('chem')}: ${t('all')}</option>${SET().chems.map(c => `<option ${DF.chem === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inp" id="dfPay"><option value="">${t('settle')}: ${t('all')}</option>${['open', 'overdue', 'done', 'over', 'short'].map(p => `<option value="${p}" ${DF.pay === p ? 'selected' : ''}>${t('pay_' + p)}</option>`).join('')}</select><span class="sp"></span><span class="muted">${rows.length} ${LANG === 'ko' ? '건' : 'rows'}</span></div>`;
+  h += `<div class="card"><div class="tbl-wrap tbl-scroll"><table class="t"><thead><tr><th>${t('invoice')}</th><th>${t('invDate')}</th><th>${t('poNo')}</th><th>${t('chem')}</th><th class="num">${t('kg')}</th><th class="num">${LANG === 'ko' ? '단가' : 'Price'}</th><th class="num">${t('billed')}</th><th class="num">${t('received')}</th><th class="num">${t('diff')}</th><th>${t('delDate')}</th><th>${t('due')}</th><th>${t('settle')}</th><th>${t('check')}</th><th>${t('note')}</th>${can('edit') ? '<th></th>' : ''}</tr></thead><tbody>
+  ${rows.map(({ d, c }) => `<tr><td><b>${esc(d.invoice)}</b></td><td>${fd(d.invDate)}</td><td>${esc(d.poNo)}</td><td>${c.chem ? `<span class="b" style="background:${chemColor(c.chem)}1a;color:${chemColor(c.chem)}">${c.chem}</span>` : ''}</td><td class="num">${fmt(num(d.qty))}</td><td class="num">${c.price != null ? '$' + c.price : ''}</td><td class="num">${money(c.billed)}${N(d.adj) ? `<div class="muted" style="font-size:11px">adj ${d.adj}</div>` : ''}</td><td class="num">${c.rcv != null ? money(c.rcv) : ''}</td><td class="num" style="color:${c.diff ? 'var(--bad)' : 'inherit'}">${c.diff != null ? money(c.diff) : ''}</td><td>${fd(d.delDate)}</td><td>${fd(c.due)}</td><td>${payBadge(c.pay)}</td><td>${c.chk === 'ok' ? '<span class="muted">OK</span>' : `<span class="b bad"><i></i>${t('chk_' + c.chk)}</span>`}</td><td class="muted">${esc(d.note || '')}</td>${can('edit') ? `<td style="white-space:nowrap"><button class="btn sm" data-act="editDel" data-id="${d.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delDel" data-id="${d.id}">${t('del')}</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="15" class="muted">${t('none')}</td></tr>`}
+  </tbody><tfoot><tr><td colspan="4">${t('total')}</td><td class="num">${fmt(rows.reduce((s, r) => s + N(r.d.qty), 0))}</td><td></td><td class="num">${money(sum('billed'))}</td><td class="num">${money(sum('rcv'))}</td><td class="num">${money(sum('diff'))}</td><td colspan="${can('edit') ? 6 : 5}"></td></tr></tfoot></table></div></div>`;
+  return h;
+}
+AFTER.deliv = () => {
+  const re = () => { RERENDER = true; render(); };
+  $('#dfQ').oninput = e => { DF.q = e.target.value; clearTimeout(window._dq); window._dq = setTimeout(() => { re(); const i = $('#dfQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); };
+  $('#dfChem').onchange = e => { DF.chem = e.target.value; re(); };
+  $('#dfPay').onchange = e => { DF.pay = e.target.value; re(); };
+};
+function delForm(d) {
+  const today = todayISO();
+  d = d || { invDate: today };
+  const opts = sortedPOs().filter(p => p.poNo).map(p => { const c = poCalc(p, '9999-12-31'); return `<option value="${esc(p.poNo)}" ${d.poNo === p.poNo ? 'selected' : ''}>${esc(p.chem)} · ${esc(p.poNo)} — ${LANG === 'ko' ? '잔여' : 'rem.'} ${fmt(c.rem)} kg ${c.isActive ? '' : '(' + t('st_' + c.st) + ')'}</option>`; }).join('');
+  const defPO = d.poNo || (sortedPOs().find(p => p.poNo && poCalc(p, '9999-12-31').isActive) || {}).poNo;
+  modal(d.id ? t('edit') : t('addDel'), `<div class="form">
+    <div class="f"><label>${t('invoice')}</label><input class="inp" id="dInv" value="${esc(d.invoice || '')}" placeholder="JAIN-261009HF"></div>
+    <div class="f"><label>${t('invDate')}</label><input class="inp" id="dDate" type="date" value="${esc(d.invDate || '')}"></div>
+    <div class="f full"><label>${t('poNo')}</label><select class="inp" id="dPO">${opts.replace(`value="${esc(defPO)}"`, `value="${esc(defPO)}" selected`)}</select></div>
+    <div class="f"><label>${t('kg')}</label><input class="inp" id="dQty" inputmode="decimal" value="${esc(d.qty ?? '')}"></div>
+    <div class="f"><label>${t('adj')} (±)</label><input class="inp" id="dAdj" inputmode="decimal" value="${esc(d.adj ?? '')}"></div>
+    <div class="f full" id="dCalc"></div>
+    <div class="f"><label>${t('received')}</label><input class="inp" id="dRcv" inputmode="decimal" value="${esc(d.received ?? '')}"><span class="hint">${LANG === 'ko' ? '입금되면 입력' : 'Enter when paid'}</span></div>
+    <div class="f"><label>${t('delDate')}</label><input class="inp" id="dDel" type="date" value="${esc(d.delDate || '')}"><span class="hint">${LANG === 'ko' ? '비우면 Invoice 일자로 주간 집계' : 'If blank, invoice date is used for weekly totals'}</span></div>
+    <div class="f full"><label>${t('note')}</label><input class="inp" id="dNote" value="${esc(d.note || '')}"></div></div>`, async () => {
+    const x = { ...d, invoice: $('#dInv').value.trim(), invDate: $('#dDate').value, poNo: $('#dPO').value, qty: num($('#dQty').value), adj: num($('#dAdj').value), received: num($('#dRcv').value), delDate: $('#dDel').value, note: $('#dNote').value.trim() };
+    if (!x.invoice || !x.invDate || !x.poNo || x.qty == null) return toast(LANG === 'ko' ? 'Invoice, 일자, PO#, 수량은 필수입니다' : 'Invoice, date, PO# and qty are required', true), false;
+    if (S.deliveries.some(y => y.id !== x.id && y.invoice === x.invoice && y.poNo === x.poNo)) return toast(LANG === 'ko' ? '같은 Invoice/PO# 행이 이미 있습니다' : 'Duplicate invoice/PO# row', true), false;
+    await Store.put('deliveries', x); toast(t('savedT'));
+  });
+  const upd = () => {
+    const po = poByNo($('#dPO').value); if (!po) { $('#dCalc').innerHTML = ''; return; }
+    const q = N($('#dQty').value), c = poCalc(po, '9999-12-31'); const own = d.id && d.poNo === po.poNo ? N(d.qty) : 0;
+    const remAfter = c.rem + own - q, amt = r2(q * N(po.price)) + N($('#dAdj').value);
+    $('#dCalc').innerHTML = `<div class="${remAfter < -SET().closeQty ? 'errbox' : 'infobox'}">${t('price')}: <b>$${po.price ?? '–'}</b> · ${t('billed')}: <b>${money(amt)}</b> · ${LANG === 'ko' ? '납품 후 PO 잔량' : 'PO balance after'}: <b>${fmt(remAfter)} kg</b>${remAfter < -SET().closeQty ? `<br>${LANG === 'ko' ? `PO 잔량 초과 — ${fmt(c.rem + own)} kg만 이 PO로, 나머지는 후속 PO로 한 줄 더 입력하세요` : `Exceeds balance — enter ${fmt(c.rem + own)} kg here and the rest on the next PO`}` : ''}</div>`;
+  };
+  ['#dPO', '#dQty', '#dAdj'].forEach(s => $(s).addEventListener('input', upd)); upd();
+  $('#dInv').addEventListener('input', () => { const m = $('#dInv').value.match(/(\d{2})(\d{2})(\d{2})/); if (m && !d.id) $('#dDate').value = `20${m[1]}-${m[2]}-${m[3]}`; });
+}
+
+/* ================= modal & actions ================= */
+function modal(title, body, onSave, saveLabel) {
+  const bg = document.createElement('div'); bg.className = 'mbg';
+  bg.innerHTML = `<div class="modal"><div class="modal-h"><h3>${title}</h3><button class="x">×</button></div><div class="modal-b">${body}</div><div class="modal-f"><button class="btn" data-x>${t('cancel')}</button>${onSave ? `<button class="btn pri" data-ok>${saveLabel || t('save')}</button>` : ''}</div></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.querySelector('.x').onclick = close; bg.querySelector('[data-x]').onclick = close;
+  bg.addEventListener('mousedown', e => { if (e.target === bg) close(); });
+  if (onSave) bg.querySelector('[data-ok]').onclick = async () => { try { const r = await onSave(); if (r !== false) close(); } catch (e) { toast(e.message, true); } };
+  return bg;
+}
+const ACT = {
+  editPO: el => can('edit') ? poForm(S.pos.find(p => p.id === el.dataset.id)) : toast(t('noPerm'), true),
+  delPO: async el => { if (!can('edit')) return; const p = S.pos.find(x => x.id === el.dataset.id); if (p.poNo && S.deliveries.some(d => d.poNo === p.poNo)) return toast(LANG === 'ko' ? '납품 내역이 있는 PO는 삭제할 수 없습니다 (수동 상태 Closed 사용)' : 'PO has deliveries — use manual status instead', true); if (confirm(t('confirmDel'))) await Store.del('pos', p.id); },
+  editDel: el => can('edit') ? delForm(S.deliveries.find(d => d.id === el.dataset.id)) : toast(t('noPerm'), true),
+  delDel: async el => { if (can('edit') && confirm(t('confirmDel'))) await Store.del('deliveries', el.dataset.id); },
+};
+document.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && ACT[el.dataset.act]) { e.preventDefault(); ACT[el.dataset.act](el); } });
+
+/* ================= Weekly customer report ================= */
+const RT = {
+  title: ['Weekly PO Status Report', '주간 PO 현황 보고서'], to: ['Prepared for', '수신'], from: ['Prepared by', '발신'], period: ['Reporting week', '보고 기간'], issue: ['Report date', '보고일'],
+  summary: ['Executive summary', '요약'], status: ['PO status', 'PO 현황'], burn: ['Remaining balance & completion forecast', '잔여수량 추이 및 소진 예측'], weekly: ['Weekly delivered volume (kg)', '주간 납품량 (kg)'],
+  poQty: ['PO quantity', 'PO 수량'], delivered: ['Delivered to date', '누적 납품'], remaining: ['Remaining balance', '잔여수량'], thisWeek: ['Delivered this week', '이번 주 납품'], rate: ['Avg. weekly run rate', '주간 평균 납품량'], est: ['Est. completion', '예상 완료일'],
+  allPO: ['All purchase orders', '전체 PO'], weekDel: ['Deliveries this week', '이번 주 납품 내역'], pay: ['Payment status', '입금 현황'], notes: ['Remarks', '전달 사항'], none: ['No deliveries this week.', '이번 주 납품 없음'],
+  inv: ['Invoice', 'Invoice'], date: ['Date', '일자'], qty: ['Qty (kg)', '수량 (kg)'], amt: ['Amount (USD)', '금액 (USD)'], po: ['PO#', 'PO#'], chem: ['Product', '품목'], type: ['Type', '유형'], prog: ['Progress', '진행률'], st: ['Status', '상태'], due: ['Due', '입금 예정'], paid: ['Paid', '입금'],
+  conf: ['Prepared from JNF AM delivery records. Forecast assumes the recent average weekly run rate continues.', 'JNF AM 납품 기록 기준. 예측은 최근 평균 주간 납품량이 유지된다는 가정입니다.'],
+  page: ['Page', '페이지'], vsLW: ['vs last week', '전주 대비'], range: ['Range', '범위'], wk: ['wk', '주'], left: ['remaining', '잔여'], nextPO: ['Next PO', '후속 PO'], qtyShort: ['Qty', '수량'],
+};
+const rt = (k, L) => (RT[k] || [k, k])[L === 'ko' ? 1 : 0];
+let REP = { we: null, L: 'en', price: false, pay: false, ask: true };
+function reportWeeks() {
+  const all = S.deliveries.map(dDate).filter(Boolean).sort(); if (!all.length) return [weekEndOf(todayISO())];
+  const out = []; const end = weekEndOf(todayISO() > all[all.length - 1] ? todayISO() : all[all.length - 1]);
+  for (let w = end; w >= weekEndOf(all[0]); w = addDays(w, -7)) out.push(w);
+  return out;
+}
+function repDoc(we) { return S.reports.find(r => r.id === we) || null; }
+function reportPOs(we) {
+  /* POs shown: the active PO per chemical as of the week end, plus any PO that had deliveries this week */
+  const set = SET(), list = [];
+  set.chems.forEach(ch => {
+    const a = activePO(ch, we); const wkPOs = sortedPOs().filter(p => p.chem === ch && p.poNo && chemWeekPO(p, we) > 0);
+    const seen = new Set();
+    [...wkPOs, ...(a ? [a] : [])].forEach(p => { if (!seen.has(p.id)) { seen.add(p.id); list.push(p); } });
+  });
+  return list;
+}
+function summaryLines(po, we, L) {
+  const c = poCalc(po, we), w = wow(po, we), fc = forecast(po, we), set = SET();
+  const rateLbl = set.rate === 'w8' ? (L === 'ko' ? '최근 8주' : '8-week') : set.rate === 'all' ? (L === 'ko' ? 'PO 시작 이후' : 'since-start') : (L === 'ko' ? '최근 4주' : '4-week');
+  const hasNext = c.next && c.next.poNo;
+  const lines = [];
+  if (L === 'ko') {
+    lines.push(`<b>${po.chem} PO ${po.poNo}</b>: 이번 주 <b>${fmt(w.wk)} kg</b> 납품, 누적 ${fmt(c.delivered)} kg (진행률 <b>${pct(c.prog)}</b>). 잔여수량은 <b>${fmt(c.rem)} kg (${pct(w.remPct)})</b>으로 전주 ${fmt(w.remPrev)} kg 대비 <b>${w.remChg != null ? Math.abs(w.remChg * 100).toFixed(1) + '% ' + (w.remChg <= 0 ? '감소' : '증가') : '–'}</b>했습니다.`);
+    if (c.rem <= SET().closeQty) lines.push(`이 PO는 이번 주에 전량 납품 완료되었습니다.${hasNext ? ` 후속 PO ${c.next.poNo}로 전환합니다.` : ''}`);
+    else if (fc.done) lines.push(`${rateLbl} 평균 납품량 ${fmt(fc.rate)} kg/주 기준, 전량 납품 완료 예상일은 <b>${fd(fc.done, L)}</b> (${fc.early !== fc.late ? `범위 ${fd(fc.early, L)} – ${fd(fc.late, L)}, ` : ''}약 ${fc.weeksLeft.toFixed(1)}주)입니다.`);
+    if (REP.ask && !hasNext && c.rem > SET().closeQty) { if (fc.trig != null && c.rem <= fc.trig) lines.push(`안정적인 공급을 위해 <b>후속 PO 발행을 요청</b>드립니다.`); else if (fc.trigDate) lines.push(`안정적인 공급을 위해 <b>${fd(fc.trigDate, L)}</b>까지 후속 PO 발행을 요청드립니다.`); }
+    if (hasNext) lines.push(`후속 PO ${c.next.poNo} (${fmt(N(c.next.qty))} kg) 접수 완료.`);
+  } else {
+    lines.push(`<b>${po.chem} — PO ${po.poNo}</b>: <b>${fmt(w.wk)} kg</b> delivered this week, bringing cumulative deliveries to ${fmt(c.delivered)} kg (<b>${pct(c.prog)}</b> complete). The remaining balance is <b>${fmt(c.rem)} kg (${pct(w.remPct)} of PO)</b>, ${w.remChg != null ? `<b>${w.remChg <= 0 ? 'down' : 'up'} ${Math.abs(w.remChg * 100).toFixed(1)}%</b> from ${fmt(w.remPrev)} kg last week` : 'first week of deliveries'}.`);
+    if (c.rem <= SET().closeQty) lines.push(`This PO was fully delivered this week.${hasNext ? ` Deliveries continue under PO ${c.next.poNo}.` : ''}`);
+    else if (fc.done) lines.push(`At the ${rateLbl} average run rate of ${fmt(fc.rate)} kg/week, the PO is projected to be fully delivered around <b>${fd(fc.done, L)}</b> (${fc.early !== fc.late ? `range ${fd(fc.early, L, true)} – ${fd(fc.late, L)}; ` : ''}~${fc.weeksLeft.toFixed(1)} weeks).`);
+    if (REP.ask && !hasNext && c.rem > SET().closeQty) { if (fc.trig != null && c.rem <= fc.trig) lines.push(`To ensure uninterrupted supply, we kindly request the <b>follow-on PO</b> at your earliest convenience.`); else if (fc.trigDate) lines.push(`To ensure uninterrupted supply, we kindly request the follow-on PO by <b>${fd(fc.trigDate, L)}</b>.`); }
+    if (hasNext) lines.push(`Follow-on PO ${c.next.poNo} (${fmt(N(c.next.qty))} kg) has been received.`);
+  }
+  return lines;
+}
+function progressBar(po, we, L) {
+  const c = poCalc(po, we), wk = chemWeekPO(po, we), col = chemColor(po.chem);
+  const prevDel = Math.max(0, c.delivered - wk), q = c.qty || 1;
+  const a = Math.min(1, prevDel / q), b = Math.min(1 - a, wk / q), r = Math.max(0, 1 - a - b);
+  return `<div class="pbar"><div style="width:${a * 100}%;background:${col};opacity:.55">${a > .14 ? `${L === 'ko' ? '이전 누적' : 'Prior'} ${pct(a, 0)}` : ''}</div><div style="width:${b * 100}%;background:${col}">${b > .08 ? `${L === 'ko' ? '이번 주' : 'This wk'} ${pct(b, 0)}` : ''}</div><div style="width:${r * 100}%;background:#e4e7ec;color:#475467">${r > .12 ? `${L === 'ko' ? '잔여' : 'Remaining'} ${pct(r, 1)}` : ''}</div></div>
+  <div class="pbar-leg"><span>0</span><span>${L === 'ko' ? '누적 납품' : 'Delivered'} ${fmt(c.delivered)} kg · ${L === 'ko' ? '잔여' : 'Remaining'} ${fmt(c.rem)} kg</span><span>${fmt(c.qty)} kg</span></div>`;
+}
+function reportHTML(we, opt) {
+  const L = opt.L, set = SET(), from = addDays(we, -6), doc = repDoc(we) || {};
+  const pos = reportPOs(we);
+  const issueDate = doc.issuedAt ? doc.issuedAt.slice(0, 10) : (todayISO() < we ? todayISO() : we);
+  const head = `<div class="r-head"><div class="co">${esc(set.company)}<small>${L === 'ko' ? '화학약품 공급 · 미국 조지아' : 'Chemical Supply · Georgia, USA'}</small></div><div class="ttl"><h1>${rt('title', L)}</h1><div>${esc(set.customer)} · ${L === 'ko' ? 'PO 진행 현황' : 'Purchase Order Fulfillment'}</div></div></div>
+    <div class="r-meta"><div><label>${rt('to', L)}</label><b>${esc(set.customer)}</b></div><div><label>${rt('period', L)}</label><b>${fd(from, L, true)} – ${fd(we, L)}</b></div><div><label>${rt('issue', L)}</label><b>${fd(issueDate, L)}</b></div><div><label>${rt('from', L)}</label><b>${esc(set.preparedBy || set.company)}</b></div></div>`;
+  const foot = n => `<div class="r-foot"><span>${esc(set.company)}${set.contact ? ' · ' + esc(set.contact) : ''}</span><span>${rt('conf', L)}</span><span>${rt('page', L)} ${n}</span></div>`;
+  if (!pos.length) return `<div class="paper" id="paper"><div class="pg">${head}<div class="r-sum">${L === 'ko' ? '이 주에 보고할 활성 PO가 없습니다.' : 'No active PO for this week.'}</div>${foot(1)}</div></div>`;
+  /* page 1: summary + per-PO KPI/progress/burndown */
+  let p1 = head + `<div class="r-sec"><h2>${rt('summary', L)}</h2><div class="r-sum">${pos.map(p => summaryLines(p, we, L).map(l => `<p>${l}</p>`).join('')).join('')}</div></div>`;
+  let pages = [];
+  pos.forEach((po, i) => {
+    const c = poCalc(po, we), w = wow(po, we), fc = forecast(po, we), col = chemColor(po.chem);
+    const finished = c.rem <= set.closeQty;
+    let sec = `<div class="r-chemhd" style="border-color:${col}"><b style="color:${col}">${esc(po.chem)}</b><b>PO ${esc(po.poNo)}</b><span>${esc(po.type || '')}${po.recv ? ` · ${L === 'ko' ? '수령' : 'issued'} ${fd(po.recv, L)}` : ''}</span>${stBadgeR(po, c, L)}</div>
+      <div class="r-kpis">
+        <div class="r-kpi"><label>${rt('poQty', L)}</label><div class="v">${fmt(c.qty)}<small>kg</small></div><div class="s">${opt.price && c.poAmt != null ? money(c.poAmt) : '&nbsp;'}</div></div>
+        <div class="r-kpi"><label>${rt('delivered', L)}</label><div class="v">${fmt(c.delivered)}<small>kg</small></div><div class="s">${pct(c.prog)} ${L === 'ko' ? '완료' : 'complete'}</div></div>
+        <div class="r-kpi hl"><label>${rt('remaining', L)}</label><div class="v">${fmt(c.rem)}<small>kg · ${pct(w.remPct)}</small></div><div class="s">${w.remChg != null ? `${w.remChg <= 0 ? '▼' : '▲'} ${Math.abs(w.remChg * 100).toFixed(1)}% ${rt('vsLW', L)} (${fmt(w.remPrev)} kg)` : '&nbsp;'}</div></div>
+        <div class="r-kpi"><label>${rt('thisWeek', L)}</label><div class="v">${fmt(w.wk)}<small>kg</small></div><div class="s">${w.wkPrev ? `${w.wkChg >= 0 ? '▲' : '▼'} ${Math.abs(w.wkChg * 100).toFixed(1)}% ${rt('vsLW', L)} (${fmt(w.wkPrev)} kg)` : `${rt('vsLW', L)}: –`}</div></div>
+        <div class="r-kpi"><label>${rt('rate', L)}</label><div class="v">${fmt(fc.rate)}<small>kg/${rt('wk', L)}</small></div><div class="s">${set.rate === 'w8' ? (L === 'ko' ? '최근 8주 평균' : 'last 8 weeks') : set.rate === 'all' ? (L === 'ko' ? 'PO 시작 이후 평균' : 'since PO start') : (L === 'ko' ? '최근 4주 평균' : 'last 4 weeks')}</div></div>
+        <div class="r-kpi hl"><label>${rt('est', L)}</label><div class="v" style="font-size:${L === 'ko' ? 18 : 19}px">${finished ? (L === 'ko' ? '완료' : 'Completed') : fd(fc.done, L)}</div><div class="s">${!finished && fc.early && fc.late && fc.early !== fc.late ? `${rt('range', L)} ${fd(fc.early, L, true)} – ${fd(fc.late, L, true)}` : '&nbsp;'}</div></div>
+      </div>
+      <div style="margin-top:12px">${progressBar(po, we, L)}</div>
+      <div class="r-chart" style="margin-top:12px"><div class="ct">${rt('burn', L)} <span>· kg · ${L === 'ko' ? '주 마감 기준' : 'at week end'}</span></div>${burndownSVG(po, we, L, { w: 740, h: 270, hideTrig: !opt.ask })}${burnLegend(po, L, !opt.ask)}</div>`;
+    if (i === 0) p1 += sec; else pages.push(sec);
+  });
+  /* page 2: weekly chart(s), tables, notes */
+  const chems = [...new Set(pos.map(p => p.chem))];
+  let p2 = chems.map(ch => `<div class="r-sec"><div class="r-chart"><div class="ct">${rt('weekly', L)} <span>· ${ch} · ${L === 'ko' ? '최근 12주, 진한 막대 = 보고 주' : 'last 12 weeks; dark bar = reporting week'}</span></div>${weeklySVG(ch, we, L, { w: 740, h: 220 })}</div></div>`).join('');
+  const allPOs = sortedPOs().filter(p => p.poNo);
+  p2 += `<div class="r-sec"><h2>${rt('allPO', L)}</h2><table class="rt"><thead><tr><th>${rt('chem', L)}</th><th>${rt('po', L)}</th><th>${rt('type', L)}</th><th class="num">${rt('poQty', L)}</th><th class="num">${rt('delivered', L)}</th><th class="num">${rt('remaining', L)}</th><th class="num">${rt('prog', L)}</th>${opt.price ? `<th class="num">${L === 'ko' ? '잔여금액' : 'Remaining $'}</th>` : ''}<th>${rt('st', L)}</th></tr></thead><tbody>${allPOs.map(p => { const c = poCalc(p, we); return `<tr><td><b style="color:${chemColor(p.chem)}">${esc(p.chem)}</b></td><td>${esc(p.poNo)}</td><td>${esc(p.type || '')}</td><td class="num">${fmt(c.qty)}</td><td class="num">${fmt(c.delivered)}</td><td class="num"><b>${fmt(c.rem)}</b></td><td class="num">${pct(c.prog)}</td>${opt.price ? `<td class="num">${money(c.remAmt)}</td>` : ''}<td>${stTextR(p, c, L)}</td></tr>`; }).join('')}</tbody></table></div>`;
+  const wkDels = S.deliveries.filter(d => dDate(d) >= from && dDate(d) <= we && poByNo(d.poNo)).sort((a, b) => dDate(a).localeCompare(dDate(b)));
+  p2 += `<div class="r-sec"><h2>${rt('weekDel', L)} · ${fd(from, L, true)} – ${fd(we, L, true)}</h2>${wkDels.length ? `<table class="rt"><thead><tr><th>${rt('date', L)}</th><th>${rt('inv', L)}</th><th>${rt('chem', L)}</th><th>${rt('po', L)}</th><th class="num">${rt('qty', L)}</th>${opt.price ? `<th class="num">${rt('amt', L)}</th>` : ''}</tr></thead><tbody>${wkDels.map(d => { const c = delCalc(d); return `<tr><td>${fd(dDate(d), L)}</td><td>${esc(d.invoice)}</td><td>${esc(c.chem)}</td><td>${esc(d.poNo)}</td><td class="num">${fmt(N(d.qty))}</td>${opt.price ? `<td class="num">${money(c.billed)}</td>` : ''}</tr>`; }).join('')}</tbody><tfoot><tr><td colspan="4">${L === 'ko' ? '합계' : 'Total'}</td><td class="num">${fmt(wkDels.reduce((s, d) => s + N(d.qty), 0))}</td>${opt.price ? `<td class="num">${money(wkDels.reduce((s, d) => s + N(delCalc(d).billed), 0))}</td>` : ''}</tr></tfoot></table>` : `<div class="r-notes muted">${rt('none', L)}</div>`}</div>`;
+  if (opt.pay) {
+    const open = S.deliveries.filter(d => d.invDate && d.invDate <= we).map(d => ({ d, c: delCalc(d) })).filter(x => x.c.billed != null && (x.c.rcv == null || x.d.invDate >= addDays(we, -27))).sort((a, b) => a.d.invDate.localeCompare(b.d.invDate));
+    p2 += `<div class="r-sec"><h2>${rt('pay', L)}</h2><table class="rt"><thead><tr><th>${rt('inv', L)}</th><th>${rt('date', L)}</th><th class="num">${rt('amt', L)}</th><th>${rt('due', L)}</th><th class="num">${rt('paid', L)}</th><th>${rt('st', L)}</th></tr></thead><tbody>${open.map(x => `<tr><td>${esc(x.d.invoice)}</td><td>${fd(x.d.invDate, L)}</td><td class="num">${money(x.c.billed)}</td><td>${fd(x.c.due, L)}</td><td class="num">${x.c.rcv != null ? money(x.c.rcv) : '–'}</td><td>${{ done: L === 'ko' ? '입금 완료' : 'Paid', open: L === 'ko' ? '입금 예정' : 'Open', overdue: L === 'ko' ? '기한 경과' : 'Past due', over: L === 'ko' ? '과입금' : 'Overpaid', short: L === 'ko' ? '부족입금' : 'Short paid' }[x.c.pay] || ''}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  const notes = (doc.notes || '').trim();
+  if (notes) p2 += `<div class="r-sec"><h2>${rt('notes', L)}</h2><div class="r-notes">${esc(notes)}</div></div>`;
+  const all = [p1, ...pages, p2];
+  return `<div class="paper" id="paper">${all.map((p, i) => `<div class="pg">${i ? `<div class="r-head" style="padding-bottom:8px;border-bottom-width:2px"><div class="co" style="font-size:13px">${esc(set.company)}</div><div class="ttl"><div>${rt('title', L)} · ${fd(from, L, true)} – ${fd(we, L)}</div></div></div>` : ''}${p}${foot(i + 1)}</div>`).join('')}</div>`;
+}
+function stTextR(p, c, L) {
+  const m = { active: ['In progress', '진행중'], near: ['Near completion', '소진 임박'], exhausted: ['Completed', '납품 완료'], rolled: ['Completed', '납품 완료'], wait: ['Queued', '대기'], noqty: ['–', '–'], nopo: ['–', '–'], manual: [p.manual, p.manual] }[c.st];
+  return m[L === 'ko' ? 1 : 0];
+}
+function stBadgeR(p, c, L) { const cls = { active: 'good', near: 'warn', exhausted: 'info', rolled: 'info', wait: 'gray', manual: 'gray' }[c.st] || 'gray'; return `<span class="b ${cls}"><i></i>${esc(stTextR(p, c, L))}</span>`; }
+function viewReport(q) {
+  const weeks = reportWeeks();
+  if (q.get('w') && weeks.includes(q.get('w'))) REP.we = q.get('w');
+  if (!REP.we || !weeks.includes(REP.we)) REP.we = weeks[0];
+  const doc = repDoc(REP.we);
+  if (doc && REP._loaded !== REP.we) { REP.L = doc.lang || REP.L; REP.price = !!doc.price; REP.pay = !!doc.pay; if (doc.ask != null) REP.ask = !!doc.ask; }
+  REP._loaded = REP.we;
+  let h = pageHead(t('report'), LANG === 'ko' ? '매주 고객(Qcells) 보고용 · A4 인쇄/PDF' : 'Weekly customer report · A4 print/PDF');
+  h += `<div class="rep-bar card" style="padding:10px 12px"><label class="chk">${t('weekEnding')}</label><select class="inp" id="rWeek">${weeks.map(w => `<option value="${w}" ${w === REP.we ? 'selected' : ''}>${fd(addDays(w, -6), LANG, true)} – ${fd(w)}${repDoc(w)?.issuedAt ? ' ✓' : ''}</option>`).join('')}</select>
+    <div class="tabs light" id="rLang"><button data-l="en" class="${REP.L === 'en' ? 'on' : ''}">English</button><button data-l="ko" class="${REP.L === 'ko' ? 'on' : ''}">한국어</button></div>
+    <label class="chk"><input type="checkbox" id="rPrice" ${REP.price ? 'checked' : ''}>${t('showPrice')}</label><label class="chk"><input type="checkbox" id="rPay" ${REP.pay ? 'checked' : ''}>${t('showPay')}</label><label class="chk"><input type="checkbox" id="rAsk" ${REP.ask ? 'checked' : ''}>${LANG === 'ko' ? '후속 PO 요청 문구' : 'Follow-on PO request'}</label>
+    <span class="sp"></span><button class="btn" id="rTxt">✉ ${t('copyTxt')}</button><button class="btn" id="rPng">▣ ${t('png')}</button><button class="btn pri" id="rPrint">⎙ ${t('print')}</button></div>`;
+  h += `<div class="rep-wrap"><div class="paper-scroll">${reportHTML(REP.we, REP)}</div>
+    <div class="rep-side card"><div class="card-b"><label style="font-size:12px;font-weight:600;color:var(--text-2)">${t('notes')}</label><textarea class="inp" id="rNotes" placeholder="${LANG === 'ko' ? '예) 다음 주 화요일 ISO 2대 납품 예정' : 'e.g. Two ISO tanks scheduled for next Tuesday'}" ${can('edit') ? '' : 'disabled'}>${esc(doc?.notes || '')}</textarea>
+    <div class="muted" style="font-size:11px;margin:4px 0 14px">${LANG === 'ko' ? '입력 후 칸 밖을 누르면 저장되어 보고서에 반영됩니다' : 'Saved and added to the report when you leave the box'}</div>
+    ${doc?.issuedAt ? `<div class="infobox">✓ ${t('issued')} · ${esc(doc.issuedAt.slice(0, 16).replace('T', ' '))}<br><span class="muted">${esc(doc.issuedBy || '')}</span></div>` : ''}
+    ${can('edit') ? `<button class="btn ${doc?.issuedAt ? '' : 'pri'}" id="rIssue" style="width:100%;justify-content:center;margin-top:10px">✓ ${doc?.issuedAt ? (LANG === 'ko' ? '보고 완료 다시 기록' : 'Re-record as issued') : t('issue')}</button>` : ''}
+    <div class="muted" style="font-size:11px;margin-top:10px">${LANG === 'ko' ? '보고 완료로 기록하면 이번 주 수치가 보고 이력에 저장됩니다.' : 'Recording saves this week\'s figures to Report History.'}</div></div></div></div>`;
+  return h;
+}
+AFTER.report = () => {
+  const re = () => { RERENDER = true; render(); };
+  $('#rWeek').onchange = e => { REP.we = e.target.value; REP._loaded = null; location.hash = '#report?w=' + REP.we; };
+  $$('#rLang button').forEach(b => b.onclick = () => { REP.L = b.dataset.l; re(); });
+  $('#rPrice').onchange = e => { REP.price = e.target.checked; re(); };
+  $('#rPay').onchange = e => { REP.pay = e.target.checked; re(); };
+  $('#rAsk').onchange = e => { REP.ask = e.target.checked; re(); };
+  const n = $('#rNotes'); if (n && can('edit')) n.onchange = async () => { const d = repDoc(REP.we) || { id: REP.we, we: REP.we }; await Store.put('reports', { ...d, notes: n.value, lang: REP.L, price: REP.price, pay: REP.pay, ask: REP.ask }); toast(t('savedT')); };
+  $('#rPrint').onclick = () => { const old = document.title; document.title = `JNF_Qcells_PO_Weekly_Report_${REP.we}`; window.print(); setTimeout(() => document.title = old, 800); };
+  $('#rPng').onclick = async () => {
+    try { await loadScript(H2C_SRC); const el = $('#paper'); const cv = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true }); const a = document.createElement('a'); a.download = `JNF_Qcells_PO_Weekly_Report_${REP.we}.png`; a.href = cv.toDataURL('image/png'); a.click(); } catch (e) { toast(e.message, true); }
+  };
+  $('#rTxt').onclick = async () => {
+    const L = REP.L, we = REP.we, set = SET();
+    const lines = reportPOs(we).flatMap(p => summaryLines(p, we, L)).map(s => s.replace(/<[^>]+>/g, ''));
+    const head = L === 'ko' ? `${set.customer} 담당자님,\n\n${fd(addDays(we, -6), L)} – ${fd(we, L)} 주간 PO 현황을 아래와 같이 보고드립니다.\n` : `Dear ${set.customer} team,\n\nPlease find below the weekly PO status for the week of ${fd(addDays(we, -6), L, true)} – ${fd(we, L)}.\n`;
+    const notes = (repDoc(we)?.notes || '').trim();
+    const tail = L === 'ko' ? `\n자세한 내용은 첨부 보고서를 참고 부탁드립니다.\n\n감사합니다.\n${set.preparedBy || set.company}` : `\nPlease see the attached report for details.\n\nBest regards,\n${set.preparedBy || set.company}`;
+    const txt = head + '\n' + lines.map(l => '• ' + l).join('\n') + (notes ? `\n\n${L === 'ko' ? '전달 사항' : 'Remarks'}:\n${notes}` : '') + '\n' + tail;
+    try { await navigator.clipboard.writeText(txt); toast(t('copied')); } catch { modal(t('copyTxt'), `<textarea class="inp" style="width:100%;min-height:260px">${esc(txt)}</textarea>`); }
+  };
+  const iss = $('#rIssue'); if (iss) iss.onclick = async () => {
+    const we = REP.we; const d = repDoc(we) || { id: we, we };
+    const figs = reportPOs(we).map(p => { const c = poCalc(p, we), w = wow(p, we), fc = forecast(p, we); return { chem: p.chem, poNo: p.poNo, qty: c.qty, delivered: c.delivered, rem: c.rem, remPct: w.remPct, remChg: w.remChg, wk: w.wk, rate: Math.round(fc.rate), done: fc.done, early: fc.early, late: fc.late }; });
+    await Store.put('reports', { ...d, notes: $('#rNotes')?.value ?? d.notes ?? '', lang: REP.L, price: REP.price, pay: REP.pay, ask: REP.ask, issuedAt: new Date().toISOString(), issuedBy: AUTH.email || AUTH.name || '', figs });
+    toast(t('savedT')); if (Store === LocalStore) re();
+  };
+};
+
+/* ================= History ================= */
+function viewHistory() {
+  const list = S.reports.filter(r => r.issuedAt).sort((a, b) => b.id.localeCompare(a.id));
+  let h = pageHead(t('history'), LANG === 'ko' ? '보고 완료로 기록한 주간 보고서와 당시 수치' : 'Issued weekly reports and the figures at the time');
+  h += `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>${t('weekEnding')}</th><th>${t('issued')}</th><th>${t('chem')}</th><th>${t('poNo')}</th><th class="num">${t('remaining')}</th><th class="num">%</th><th class="num">${t('wow')}</th><th class="num">${t('thisWeek')}</th><th>${t('estDone')}</th><th></th></tr></thead><tbody>
+  ${list.flatMap(r => (r.figs && r.figs.length ? r.figs : [{}]).map((f, i) => `<tr><td>${i ? '' : `<b>${fd(r.id)}</b>`}</td><td class="muted">${i ? '' : esc((r.issuedAt || '').slice(0, 16).replace('T', ' ')) + '<br>' + esc(r.issuedBy || '')}</td><td>${esc(f.chem || '')}</td><td>${esc(f.poNo || '')}</td><td class="num">${fmt(f.rem)}</td><td class="num">${pct(f.remPct)}</td><td class="num">${f.remChg != null ? deltaTxt(f.remChg) : '–'}</td><td class="num">${fmt(f.wk)}</td><td>${fd(f.done)}</td><td>${i ? '' : `<a class="btn sm" href="#report?w=${r.id}">${t('open')}</a>`}</td></tr>`)).join('') || `<tr><td colspan="10" class="muted">${t('none')}</td></tr>`}
+  </tbody></table></div></div>`;
+  if (list.length > 1) {
+    /* forecast drift: how the estimated completion moved between reports */
+    const pts = list.slice().reverse().flatMap(r => (r.figs || []).filter(f => f.done).map(f => ({ we: r.id, ...f })));
+    if (pts.length > 1) h += `<div class="card" style="margin-top:16px"><div class="card-h"><h3>${LANG === 'ko' ? '예상 완료일 변화' : 'Forecast completion over time'}</h3></div><div class="card-b"><table class="t"><thead><tr><th>${t('weekEnding')}</th><th>${t('poNo')}</th><th>${t('estDone')}</th><th>${LANG === 'ko' ? '변화' : 'Change'}</th></tr></thead><tbody>${pts.map((p, i) => { const prev = pts.slice(0, i).reverse().find(x => x.poNo === p.poNo); const dd = prev ? diffDays(p.done, prev.done) : null; return `<tr><td>${fd(p.we)}</td><td>${esc(p.poNo)}</td><td>${fd(p.done)}</td><td>${dd == null ? '' : dd === 0 ? '±0' : (dd > 0 ? '+' : '') + dd + (LANG === 'ko' ? '일' : 'd')}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+  }
+  return h;
+}
+
+/* ================= Settings, Excel import/export ================= */
+function viewSettings() {
+  const s = SET(), dis = can('admin') ? '' : 'disabled';
+  let h = pageHead(t('settings'));
+  h += `<div class="row-eq"><div class="card"><div class="card-h"><h3>${LANG === 'ko' ? '판정 기준' : 'Rules'}</h3></div><div class="card-b"><div class="form">
+    <div class="f"><label>${t('s_close')}</label><input class="inp" id="sClose" value="${s.closeQty}" ${dis}></div>
+    <div class="f"><label>${t('s_near')}</label><input class="inp" id="sNear" value="${s.nearQty}" ${dis}><span class="hint">${LANG === 'ko' ? '기본값 ≈ ISO 2대분' : '≈ 2 ISO tanks'}</span></div>
+    ${s.chems.map(c => `<div class="f"><label>${t('s_trig')} — ${c}</label><input class="inp" data-trig="${c}" value="${s.trig?.[c] ?? ''}" placeholder="${LANG === 'ko' ? '비워두면 알림 없음' : 'blank = no alert'}" ${dis}></div>`).join('')}
+    <div class="f"><label>${t('s_tol')}</label><input class="inp" id="sTol" value="${s.payTol}" ${dis}></div>
+    <div class="f"><label>${t('s_tt')}</label><input class="inp" id="sTT" value="${s.ttDefault}" ${dis}></div>
+    <div class="f"><label>${t('s_we')}</label><select class="inp" id="sWE" ${dis}>${(LANG === 'ko' ? ['일', '월', '화', '수', '목', '금', '토'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => `<option value="${i}" ${s.weekEnd === i ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+    <div class="f"><label>${t('s_rate')}</label><select class="inp" id="sRate" ${dis}>${['w4', 'w8', 'all'].map(r => `<option value="${r}" ${s.rate === r ? 'selected' : ''}>${t('r_' + r)}</option>`).join('')}</select><span class="hint">${LANG === 'ko' ? '예측 범위는 4주·8주 평균으로 표시' : 'Range always shows 4- and 8-week averages'}</span></div>
+  </div></div></div>
+  <div class="card"><div class="card-h"><h3>${LANG === 'ko' ? '보고서 정보' : 'Report details'}</h3></div><div class="card-b"><div class="form">
+    <div class="f full"><label>${t('s_cust')}</label><input class="inp" id="sCust" value="${esc(s.customer)}" ${dis}></div>
+    <div class="f full"><label>${t('s_co')}</label><input class="inp" id="sCo" value="${esc(s.company)}" ${dis}></div>
+    <div class="f"><label>${t('s_by')}</label><input class="inp" id="sBy" value="${esc(s.preparedBy)}" placeholder="Name, Title" ${dis}></div>
+    <div class="f"><label>${t('s_contact')}</label><input class="inp" id="sContact" value="${esc(s.contact)}" ${dis}></div>
+  </div>${can('admin') ? `<div style="margin-top:16px"><button class="btn pri" id="sSave">${t('save')}</button></div>` : ''}</div></div></div>`;
+  h += `<div class="card"><div class="card-h"><h3>${LANG === 'ko' ? '엑셀 연동' : 'Excel'}</h3></div><div class="card-b">
+    <p class="muted" style="margin-top:0">${LANG === 'ko' ? '기존 "QCELLS PO 관리" 엑셀(PO 마스터 · 납품 내역 · 설정 시트)을 그대로 가져옵니다. 가져오면 앱의 PO와 납품 내역이 엑셀 내용으로 바뀝니다.' : 'Import the existing "QCELLS PO" workbook (PO master, deliveries and settings sheets). This replaces POs and deliveries in the app.'}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${can('admin') ? `<label class="btn pri">⇪ ${t('importX')}<input type="file" id="xFile" accept=".xlsx,.xlsm,.xls" hidden></label>` : ''}<button class="btn" id="xOut">⇩ ${t('exportX')}</button></div><div id="xMsg" style="margin-top:10px"></div></div></div>`;
+  return h;
+}
+AFTER.settings = () => {
+  const sv = $('#sSave'); if (sv) sv.onclick = async () => {
+    const s = SET(); const trig = { ...s.trig }; $$('[data-trig]').forEach(i => trig[i.dataset.trig] = num(i.value));
+    await Store.put('settings', { ...s, id: 'main', closeQty: N($('#sClose').value), nearQty: N($('#sNear').value), payTol: N($('#sTol').value), ttDefault: N($('#sTT').value) || 30, weekEnd: +$('#sWE').value, rate: $('#sRate').value, trig, customer: $('#sCust').value.trim(), company: $('#sCo').value.trim(), preparedBy: $('#sBy').value.trim(), contact: $('#sContact').value.trim() });
+    toast(t('savedT'));
+  };
+  const f = $('#xFile'); if (f) f.onchange = async () => { const file = f.files[0]; f.value = ''; if (file) importExcel(file); };
+  $('#xOut').onclick = exportExcel;
+};
+const serialISO = v => { if (v == null || v === '') return ''; if (typeof v === 'number') return iso(new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5)); const s = String(v).trim(); const m = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/); if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`; const d = new Date(s); return isNaN(d) ? '' : iso(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); };
+async function importExcel(file) {
+  try {
+    await loadScript(XLSX_SRC);
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const sh = name => { const k = wb.SheetNames.find(n => n.replace(/\s/g, '') === name.replace(/\s/g, '')); return k ? XLSX.utils.sheet_to_json(wb.Sheets[k], { header: 1, raw: true, defval: null }) : null; };
+    const pm = sh('PO 마스터'), dl = sh('납품 내역'), st = sh('설정');
+    if (!pm || !dl) throw new Error(LANG === 'ko' ? "'PO 마스터'와 '납품 내역' 시트를 찾지 못했습니다" : 'PO master / deliveries sheets not found');
+    const pos = [];
+    for (let i = 4; i < pm.length; i++) { const r = pm[i] || []; const chem = r[1] && String(r[1]).trim(); if (!chem) continue; const poNo = r[3] != null ? String(r[3]).trim() : ''; const qty = num(r[6]); if (!poNo && !qty) continue; pos.push({ id: uid(), chem, seq: N(r[2]) || 1, poNo, type: r[4] || '', recv: serialISO(r[5]), qty, price: num(r[7]), carry: N(r[8]), tt: num(r[9]), note: r[10] || '', manual: r[11] || '' }); }
+    const dels = [];
+    for (let i = 4; i < dl.length; i++) { const r = dl[i] || []; if (String(r[0] || '').toUpperCase() === 'TOTAL') break; if (!r[1] && !r[3] && r[5] == null) continue; dels.push({ id: uid(), invoice: r[1] ? String(r[1]).trim() : '', invDate: serialISO(r[2]), poNo: r[3] != null ? String(r[3]).trim() : '', qty: num(r[5]), adj: num(r[8]), received: num(r[10]), delDate: serialISO(r[12]), note: r[14] || '' }); }
+    let setPatch = {};
+    if (st) { const val = lbl => { const row = st.find(r => r && r[0] && String(r[0]).includes(lbl)); return row ? num(row[1]) : null; }; const tt = st.findIndex(r => r && String(r[0] || '').includes('T/T')); setPatch = { closeQty: val('소진 판정') ?? 0, nearQty: val('소진 임박') ?? 37500, payTol: val('입금 차이') ?? 0.05, trig: { HF: val('— HF'), HCl: val('— HCl'), HNO3: val('— HNO3') } }; if (tt >= 0 && st[tt + 1]) setPatch.ttDefault = num(st[tt + 1][1]) || 30; }
+    if (!confirm(`${t('importConfirm')}\n\nPO ${pos.length} · ${LANG === 'ko' ? '납품' : 'deliveries'} ${dels.length}`)) return;
+    $('#xMsg').innerHTML = `<span class="spin"></span> ${t('loading')}`;
+    await Store.clear('pos'); await Store.clear('deliveries');
+    await Store.putMany('pos', pos); await Store.putMany('deliveries', dels);
+    await Store.put('settings', { ...SET(), ...setPatch, id: 'main' });
+    $('#xMsg').innerHTML = `<div class="infobox">✓ ${t('imported')}: PO ${pos.length} · ${LANG === 'ko' ? '납품' : 'deliveries'} ${dels.length}</div>`;
+    toast(t('imported'));
+  } catch (e) { console.error(e); toast(e.message, true); }
+}
+async function exportExcel() {
+  try {
+    await loadScript(XLSX_SRC);
+    const today = todayISO();
+    const po = [['Chemical', 'Seq', 'PO#', 'PO type', 'PO received', 'PO qty (kg)', 'Unit price', 'Carry-over (kg)', 'T/T', 'Note', 'Manual status', 'PO amount', 'Delivered (kg)', 'Remaining (kg)', 'Progress', 'Remaining $', 'Unpaid $', 'Next PO#', 'Status', 'Est. completion']];
+    sortedPOs().forEach(p => { const c = poCalc(p, today), fc = p.poNo && c.isActive ? forecast(p, today) : {}; po.push([p.chem, p.seq, p.poNo, p.type, p.recv, c.qty, c.price, N(p.carry), p.tt, p.note, p.manual, c.poAmt, c.delivered, c.rem, c.prog, c.remAmt, c.unpaid, c.next?.poNo || '', t('st_' + c.st) || p.manual, fc.done || '']); });
+    const dl = [['JNF Invoice', 'Invoice date', 'PO#', 'Chemical', 'Qty (kg)', 'Unit price', 'Amount', 'Adj.', 'Billed', 'Received', 'Diff', 'Delivery date', 'Due date', 'Note', 'Payment', 'PO check']];
+    [...S.deliveries].sort((a, b) => dDate(a).localeCompare(dDate(b))).forEach(d => { const c = delCalc(d); dl.push([d.invoice, d.invDate, d.poNo, c.chem, num(d.qty), c.price, c.amount, num(d.adj), c.billed, c.rcv, c.diff, d.delDate, c.due, d.note, c.pay ? t('pay_' + c.pay) : '', t('chk_' + c.chk)]); });
+    const wb = XLSX.utils.book_new();
+    const w1 = XLSX.utils.aoa_to_sheet(po), w2 = XLSX.utils.aoa_to_sheet(dl);
+    w1['!cols'] = po[0].map(() => ({ wch: 15 })); w2['!cols'] = dl[0].map(() => ({ wch: 15 }));
+    XLSX.utils.book_append_sheet(wb, w1, 'PO Master'); XLSX.utils.book_append_sheet(wb, w2, 'Deliveries');
+    XLSX.writeFile(wb, `Qcells_PO_${today}.xlsx`);
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ================= Online mode: Firebase Auth (Microsoft 365) & roles ================= */
+const LOCAL_FORCED = new URLSearchParams(location.search).has('local');
+const CLOUD = !LOCAL_FORCED && !!(CFG.firebase && CFG.firebase.apiKey) && typeof firebase !== 'undefined';
+const AUTH = { user: null, email: '', name: '', role: CLOUD ? '' : 'admin', status: CLOUD ? 'init' : 'ok' };
+const ROLES = ['admin', 'editor', 'viewer'];
+const can = what => what === 'admin' ? AUTH.role === 'admin' : what === 'edit' ? (AUTH.role === 'admin' || AUTH.role === 'editor') : !!AUTH.role;
+const ADM = { users: [], requests: [], unsub: [] };
+function msProvider() { const p = new firebase.auth.OAuthProvider('microsoft.com'); p.setCustomParameters({ tenant: CFG.msTenant || 'organizations', prompt: 'select_account' }); p.addScope('User.Read'); return p; }
+const MS_ICON = '<svg width="14" height="14" viewBox="0 0 21 21" style="vertical-align:-2px"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>';
+function gate(state) {
+  AUTH.status = state; let g = $('#gate');
+  if (state === 'ok') { if (g) g.remove(); return; }
+  if (!g) { g = document.createElement('div'); g.id = 'gate'; document.body.appendChild(g); }
+  g.innerHTML = `<div class="gate-card"><div class="logo" style="margin:0 auto 14px;width:46px;height:46px;font-size:14px">QPO</div><h2>${t('gateTitle')}</h2>
+    ${state === 'init' ? `<p><span class="spin"></span> ${t('loading')}</p>` : ''}
+    ${state === 'login' ? `<p>${t('gateSub')}</p><button class="btn pri" id="gSignIn" style="padding:11px 20px;font-size:14px">${MS_ICON} ${t('signIn')}</button>` : ''}
+    ${state === 'pending' ? `<div class="warnbox" style="text-align:left"><b>${t('pending')}</b><br>${t('pendingSub')}<br><span class="muted">${esc(AUTH.email)}</span></div><p></p><button class="btn" id="gOut">${t('signOut')}</button>` : ''}
+    ${state === 'disabled' ? `<div class="errbox">${t('disabled')}<br>${esc(AUTH.email)}</div><p></p><button class="btn" id="gOut">${t('signOut')}</button>` : ''}
+    ${state === 'error' ? `<div class="errbox" style="text-align:left">${esc(AUTH.error || '')}</div><p></p><button class="btn" id="gOut">${t('signOut')}</button>` : ''}
+    <div class="lang-toggle light" style="max-width:200px;margin:22px auto 0;background:var(--surface-2);border:1px solid var(--line)"><button data-lang="ko" class="${LANG === 'ko' ? 'on' : ''}" style="color:var(--text-2)">한국어</button><button data-lang="en" class="${LANG === 'en' ? 'on' : ''}" style="color:var(--text-2)">English</button></div></div>`;
+  $$('#gate .lang-toggle button').forEach(b => b.onclick = () => { LANG = b.dataset.lang; try { localStorage.setItem('qpo_lang', LANG); } catch { } gate(AUTH.status); });
+  if ($('#gSignIn')) $('#gSignIn').onclick = async () => { try { await firebase.auth().signInWithPopup(msProvider()); } catch (e) { if (!/popup-closed|cancelled/.test(e.code || '')) toast(e.message, true); } };
+  if ($('#gOut')) $('#gOut').onclick = signOut;
+}
+async function signOut() { CloudStore.stop(); ADM.unsub.forEach(u => u()); await firebase.auth().signOut(); location.hash = ''; }
+async function cloudBoot() {
+  firebase.initializeApp(CFG.firebase);
+  try { firebase.firestore().enablePersistence({ synchronizeTabs: true }).catch(() => { }); } catch { }
+  Store = CloudStore; gate('init');
+  firebase.auth().onAuthStateChanged(async u => {
+    if (!u) { AUTH.user = null; AUTH.role = ''; gate('login'); return; }
+    gate('init');
+    AUTH.user = u; AUTH.email = (u.email || (u.providerData[0] || {}).email || '').toLowerCase(); AUTH.name = u.displayName || AUTH.email;
+    const db = firebase.firestore();
+    try {
+      const ref = db.collection(CP + 'users').doc(AUTH.email);
+      let snap = await ref.get();
+      if (!snap.exists && (CFG.adminEmails || []).map(x => x.toLowerCase()).includes(AUTH.email)) { await ref.set({ id: AUTH.email, email: AUTH.email, name: AUTH.name, role: 'admin', active: true, createdAt: new Date().toISOString(), createdBy: 'bootstrap' }); snap = await ref.get(); }
+      if (!snap.exists) { await db.collection(CP + 'accessRequests').doc(AUTH.email).set({ id: AUTH.email, email: AUTH.email, name: AUTH.name, at: new Date().toISOString() }); AUTH.role = ''; gate('pending'); return; }
+      const me = snap.data();
+      if (!me.active) { AUTH.role = ''; gate('disabled'); return; }
+      AUTH.role = me.role;
+      ref.update({ lastLogin: new Date().toISOString(), name: AUTH.name }).catch(() => { });
+      await CloudStore.init();
+      if (can('admin')) watchAdmin();
+      gate('ok'); render();
+    } catch (e) { console.error(e); AUTH.error = e.message + (/permission/i.test(e.message) ? (LANG === 'ko' ? ' — Firestore 규칙에 qpo_ 컬렉션 규칙이 추가되었는지 확인하세요.' : ' — check that Firestore rules include the qpo_ collections.') : ''); gate('error'); }
+  });
+}
+function watchAdmin() {
+  const db = firebase.firestore();
+  ADM.unsub.push(db.collection(CP + 'users').onSnapshot(s => { ADM.users = s.docs.map(d => d.data()); if (route().p === 'users') scheduleRender(); }));
+  ADM.unsub.push(db.collection(CP + 'accessRequests').onSnapshot(s => { ADM.requests = s.docs.map(d => d.data()); scheduleRender(); }));
+}
+const keepsAdmin = (id, patch) => ADM.users.some(u => { const x = u.id === id ? (patch === null ? null : { ...u, ...patch }) : u; return x && x.role === 'admin' && x.active; });
+function viewUsers() {
+  if (!CLOUD || !can('admin')) return `<div class="errbox">${t('noPerm')}</div>`;
+  const roleSel = (u, cls) => `<select class="inp ${cls}" data-id="${esc(u.id)}" ${u.id === AUTH.email ? 'disabled' : ''}>${ROLES.map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${t('role_' + r)}</option>`).join('')}</select>`;
+  let h = pageHead(t('users'));
+  if (ADM.requests.length) h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${t('requests')}</h3></div><div class="card-b"><table class="t"><tbody>${ADM.requests.map(r => `<tr><td><b>${esc(r.name || '')}</b><div class="muted">${esc(r.email)}</div></td><td class="muted">${esc((r.at || '').slice(0, 16).replace('T', ' '))}</td><td>${roleSel({ id: r.id, role: 'viewer' }, 'rqRole')}</td><td style="text-align:right"><button class="btn sm pri" data-uact="approve" data-id="${esc(r.id)}">${t('approve')}</button> <button class="btn sm" data-uact="dismiss" data-id="${esc(r.id)}">${t('dismiss')}</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  h += `<div class="card"><div class="card-h"><h3>${t('users')}</h3><span class="sp"></span><button class="btn sm" data-uact="add">＋ ${t('add')}</button></div><div class="card-b"><table class="t"><thead><tr><th>${t('name')}</th><th>${t('email')}</th><th>${t('role')}</th><th>${t('active')}</th><th>${t('lastLogin')}</th><th></th></tr></thead><tbody>
+  ${[...ADM.users].sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role)).map(u => `<tr><td>${esc(u.name || '')}</td><td class="muted">${esc(u.email)}</td><td>${roleSel(u, 'uRole')}</td><td><input type="checkbox" class="uAct" data-id="${esc(u.id)}" ${u.active ? 'checked' : ''} ${u.id === AUTH.email ? 'disabled' : ''}></td><td class="muted">${esc((u.lastLogin || '').slice(0, 16).replace('T', ' '))}</td><td>${u.id === AUTH.email ? '' : `<button class="btn sm danger" data-uact="del" data-id="${esc(u.id)}">${t('del')}</button>`}</td></tr>`).join('')}</tbody></table>
+  <div class="muted" style="font-size:12px;margin-top:12px">${LANG === 'ko' ? '관리자: 사용자·설정·엑셀 가져오기 / 담당자: PO·납품 등록·수정, 보고 완료 기록 / 조회자: 조회·인쇄만' : 'Admin: users, settings, import · Editor: POs, deliveries, reports · Viewer: view & print'}</div></div></div>`;
+  return h;
+}
+AFTER.users = () => {
+  if (!CLOUD) return; const db = firebase.firestore(), col = db.collection(CP + 'users');
+  $$('.uRole').forEach(s => s.onchange = async () => { if (!keepsAdmin(s.dataset.id, { role: s.value })) { render(); return toast(t('lastAdmin'), true); } await col.doc(s.dataset.id).update({ role: s.value }); toast(t('savedT')); });
+  $$('.uAct').forEach(c => c.onchange = async () => { if (!keepsAdmin(c.dataset.id, { active: c.checked })) { render(); return toast(t('lastAdmin'), true); } await col.doc(c.dataset.id).update({ active: c.checked }); toast(t('savedT')); });
+  $$('[data-uact]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.id, a = b.dataset.uact;
+    try {
+      if (a === 'approve') { const r = ADM.requests.find(x => x.id === id); const role = b.closest('tr').querySelector('.rqRole').value; await col.doc(id).set({ id, email: id, name: r?.name || '', role, active: true, createdAt: new Date().toISOString(), createdBy: AUTH.email }); await db.collection(CP + 'accessRequests').doc(id).delete(); toast(t('savedT')); }
+      if (a === 'dismiss' && confirm(t('confirmDel'))) await db.collection(CP + 'accessRequests').doc(id).delete();
+      if (a === 'del') { if (!keepsAdmin(id, null)) return toast(t('lastAdmin'), true); if (confirm(t('confirmDel'))) await col.doc(id).delete(); }
+      if (a === 'add') modal(t('add'), `<div class="form"><div class="f full"><label>${t('email')}</label><input class="inp" id="nuE" placeholder="name@jnfam.onmicrosoft.com"></div><div class="f"><label>${t('name')}</label><input class="inp" id="nuN"></div><div class="f"><label>${t('role')}</label><select class="inp" id="nuR">${ROLES.map(r => `<option value="${r}" ${r === 'viewer' ? 'selected' : ''}>${t('role_' + r)}</option>`).join('')}</select></div></div>`, async () => { const e = $('#nuE').value.trim().toLowerCase(); if (!/@/.test(e)) return false; await col.doc(e).set({ id: e, email: e, name: $('#nuN').value.trim(), role: $('#nuR').value, active: true, createdAt: new Date().toISOString(), createdBy: AUTH.email }); toast(t('savedT')); });
+    } catch (e) { toast(e.message, true); }
+  });
+};
+
+/* ================= Online mode: shared team password (no login) ================= */
+const PASS_KEY_LS = 'qpo_pass_key_v1', NAME_LS = 'qpo_user_name';
+async function passDerive(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('jnfam-qcells-po|' + pw.trim()));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch { } };
+function passLock() { CloudStore.stop(); lsSet(PASS_KEY_LS, ''); COLS.forEach(c => S[c] = []); AUTH.role = ''; passGate('pass'); }
+async function passOpen(key, create) {
+  CloudStore.stop(); CP = `${CFG.collectionPrefix ?? 'qpo_'}${key}_`;
+  passGate('init');
+  try {
+    await CloudStore.init();
+    if (!S.settings.some(x => x.id === 'main')) {
+      if (!create) { passGate('nodata', key); return; }
+      await Store.put('settings', { ...DEF_SET });
+    }
+    lsSet(PASS_KEY_LS, key); AUTH.role = 'admin'; AUTH.name = lsGet(NAME_LS);
+    passGate('ok'); render();
+  } catch (e) { console.error(e); CloudStore.stop(); lsSet(PASS_KEY_LS, ''); AUTH.error = /permission/i.test(e.message) ? (LANG === 'ko' ? '비밀번호가 올바르지 않습니다.' : 'Incorrect password.') : e.message; passGate('error'); }
+}
+function passGate(state, key) {
+  AUTH.status = state; let g = $('#gate');
+  if (state === 'ok') { if (g) g.remove(); return; }
+  if (!g) { g = document.createElement('div'); g.id = 'gate'; document.body.appendChild(g); }
+  const ko = LANG === 'ko';
+  g.innerHTML = `<div class="gate-card"><div class="logo" style="margin:0 auto 14px;width:46px;height:46px;font-size:14px">QPO</div><h2>${t('gateTitle')}</h2>
+    ${state === 'init' ? `<p><span class="spin"></span> ${t('loading')}</p>` : ''}
+    ${state === 'pass' ? `<p>${ko ? '팀 공용 비밀번호를 입력하세요. 이 브라우저에서는 한 번만 입력하면 됩니다.' : 'Enter the team password. This browser will remember it.'}</p>
+      <form id="pForm" style="display:flex;flex-direction:column;gap:10px;text-align:left">
+        <input class="inp" id="pPw" type="password" autocomplete="current-password" placeholder="${ko ? '비밀번호' : 'Password'}" style="padding:10px 12px" autofocus>
+        <input class="inp" id="pName" value="${esc(lsGet(NAME_LS))}" placeholder="${ko ? '내 이름 (선택 · 보고 이력에 기록)' : 'Your name (optional, for report history)'}" style="padding:10px 12px">
+        <button class="btn pri" style="justify-content:center;padding:10px">${ko ? '열기' : 'Open'}</button></form>` : ''}
+    ${state === 'nodata' ? `<div class="warnbox" style="text-align:left">${ko ? '이 비밀번호로 저장된 데이터가 없습니다. 비밀번호가 맞는지 확인하세요.<br><br>처음 설정하는 경우에만 <b>새로 시작</b>을 누르세요.' : 'No data found for this password. Please check it.<br><br>Choose <b>Start new</b> only for first-time setup.'}</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button class="btn" id="pBack">${ko ? '다시 입력' : 'Try again'}</button><button class="btn pri" id="pNew">${ko ? '이 비밀번호로 새로 시작' : 'Start new with this password'}</button></div>` : ''}
+    ${state === 'error' ? `<div class="errbox" style="text-align:left">${esc(AUTH.error || '')}</div><p></p><button class="btn" id="pBack">${ko ? '다시 입력' : 'Try again'}</button>` : ''}
+    <div class="lang-toggle" style="max-width:200px;margin:22px auto 0;background:var(--surface-2);border:1px solid var(--line)"><button data-lang="ko" class="${LANG === 'ko' ? 'on' : ''}" style="color:var(--text-2)">한국어</button><button data-lang="en" class="${LANG === 'en' ? 'on' : ''}" style="color:var(--text-2)">English</button></div></div>`;
+  $$('#gate .lang-toggle button').forEach(b => b.onclick = () => { LANG = b.dataset.lang; lsSet('qpo_lang', LANG); passGate(AUTH.status, key); });
+  const f = $('#pForm'); if (f) { setTimeout(() => $('#pPw')?.focus(), 30); f.onsubmit = async e => { e.preventDefault(); const pw = $('#pPw').value; if (!pw.trim()) return; lsSet(NAME_LS, $('#pName').value.trim()); passOpen(await passDerive(pw), false); }; }
+  if ($('#pBack')) $('#pBack').onclick = () => { lsSet(PASS_KEY_LS, ''); passGate('pass'); };
+  if ($('#pNew')) $('#pNew').onclick = () => passOpen(key, true);
+}
+function passBoot() {
+  firebase.initializeApp(CFG.firebase);
+  Store = CloudStore;
+  const k = lsGet(PASS_KEY_LS);
+  if (k) passOpen(k, false); else passGate('pass');
+}
+
+/* ================= boot ================= */
+document.documentElement.lang = LANG;
+if (CLOUD) (PASS_MODE ? passBoot() : cloudBoot()); else LocalStore.init().then(render);
+</script>
+</body>
+</html>
