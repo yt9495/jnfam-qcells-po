@@ -1,8 +1,5 @@
 <!doctype html>
-<!--
-  © 2025–2026 Young Tai Kang. All rights reserved.
-  Unauthorized use, copying, modification, or distribution without the written permission of Young Tai Kang is prohibited.
--->
+<!-- © 2025–2026 Young Tai Kang. All rights reserved. Unauthorized use, copying, modification, or distribution without the written permission of Young Tai Kang is prohibited. -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -241,6 +238,7 @@ table.rt tfoot td{font-weight:700;border-top:1.5px solid var(--navy);background:
       <div class="lang-toggle" id="langT"><button data-lang="ko">한국어</button><button data-lang="en">English</button></div>
       <div class="who" id="who"></div>
       <div class="store-mode" id="storeMode"></div>
+      <div class="store-mode" style="font-size:10px;opacity:.7">© 2025–2026 Young Tai Kang</div>
     </div>
   </nav>
   <main id="main"></main>
@@ -283,7 +281,8 @@ const I = {
   dash: ['Dashboard', '대시보드'], report: ['Weekly Report', '주간 보고서'], pos: ['PO Master', 'PO 마스터'], deliv: ['Deliveries', '납품 내역'], history: ['Report History', '보고 이력'], settings: ['Settings', '설정'], users: ['Users & roles', '사용자·권한'],
   chem: ['Chemical', '화학약품'], poNo: ['PO#', 'PO#'], seq: ['Seq.', '순번'], type: ['PO type', 'PO 유형'], recv: ['PO received', 'PO 수령일'], qty: ['PO qty (kg)', '발주수량 (kg)'], price: ['Unit price (USD/kg)', '단가 (USD/kg)'], carry: ['Carry-over delivered (kg)', '기존 납품 이월 (kg)'], tt: ['T/T (days)', 'T/T 조건 (일)'], note: ['Note', '비고'], manual: ['Manual status', '수동 상태'],
   poAmt: ['PO amount', 'PO 금액'], delivered: ['Delivered', '납품누계'], remaining: ['Remaining', '잔여수량'], progress: ['Progress', '진행률'], remAmt: ['Remaining $', '잔여금액'], unpaid: ['Unpaid billed', '미수 청구'], next: ['Next PO', '후속 PO#'], status: ['Status', '상태'],
-  invoice: ['JNF Invoice', 'JNF Invoice'], invDate: ['Invoice date', 'Invoice 요청일'], kg: ['Qty (kg)', '수량 (kg)'], amount: ['Amount', '금액'], adj: ['Adj.', '조정'], billed: ['Billed', '청구금액'], received: ['Received USD', '수령금액 USD'], diff: ['Diff', '입금 차이'], delDate: ['Delivery date', '납품일'], due: ['Due date', '입금 예정일'], settle: ['Payment', '정산 상태'], check: ['PO check', 'PO 잔량 체크'],
+  invoice: ['JNF Invoice', 'JNF Invoice'], invDate: ['Invoice date', 'Invoice 일자'], ref: ['Shipment ref. (BOL / tank #)', '출하 참조 (BOL·탱크#)'], refS: ['Ship ref.', '출하 참조'],
+  invSt: ['Invoice', '인보이스'], uninv: ['Not invoiced', '미청구'], invd: ['Invoiced', '청구됨'], assignInv: ['Assign invoice to selected', '선택 납품에 인보이스 지정'], uninvKg: ['Not yet invoiced', '인보이스 미발행 납품'], recent: ['Recent deliveries', '최근 납품'], showPayCols: ['Show payment columns', '입금 정보 보기'], cumDel: ['Delivered to date (active POs)', '누적 납품 (활성 PO)'], kg: ['Qty (kg)', '수량 (kg)'], amount: ['Amount', '금액'], adj: ['Adj.', '조정'], billed: ['Billed', '청구금액'], received: ['Received USD', '수령금액 USD'], diff: ['Diff', '입금 차이'], delDate: ['Delivery date', '납품일'], due: ['Due date', '입금 예정일'], settle: ['Payment', '정산 상태'], check: ['PO check', 'PO 잔량 체크'],
   add: ['Add', '추가'], addPO: ['New PO', 'PO 등록'], addDel: ['New delivery', '납품 등록'], edit: ['Edit', '수정'], del: ['Delete', '삭제'], save: ['Save', '저장'], cancel: ['Cancel', '취소'], confirmDel: ['Delete this item?', '삭제할까요?'], savedT: ['Saved', '저장했습니다'], noPerm: ['No permission', '권한이 없습니다'],
   all: ['All', '전체'], search: ['Search…', '검색…'], total: ['TOTAL', '합계'],
   st_manual: ['', ''], st_noqty: ['Qty needed', '수량 입력 필요'], st_rolled: ['Rolled over', 'Rolled over'], st_exhausted: ['Exhausted — next PO needed', '소진 — 후속 PO 필요'], st_wait: ['Queued', '대기 (이전 PO 진행중)'], st_near: ['Near completion', '소진 임박'], st_active: ['In progress', '진행중'], st_nopo: ['PO# pending', 'PO# 미입력'],
@@ -360,11 +359,11 @@ function delCalc(d) {
   const tt = po && N(po.tt) ? N(po.tt) : set.ttDefault;
   const due = d.invDate && po ? addDays(d.invDate, tt) : '';
   let pay = '';
-  if (billed != null) pay = rcv == null ? (due && due < todayISO() ? 'overdue' : 'open') : Math.abs(diff) <= set.payTol ? 'done' : diff > 0 ? 'over' : 'short';
+  if (billed != null && d.invoice) pay = rcv == null ? (due && due < todayISO() ? 'overdue' : 'open') : Math.abs(diff) <= set.payTol ? 'done' : diff > 0 ? 'over' : 'short';
   let chk = 'ok';
   if (!po) chk = 'nopo';
   else {
-    const prior = S.deliveries.filter(x => x.poNo === d.poNo && (dDate(x) < dDate(d) || (dDate(x) === dDate(d) && (x.invoice || '') <= (d.invoice || ''))));
+    const prior = S.deliveries.filter(x => x.poNo === d.poNo && (dDate(x) < dDate(d) || (dDate(x) === dDate(d) && String(x.id) <= String(d.id))));
     if (N(po.carry) + prior.reduce((s, x) => s + N(x.qty), 0) > N(po.qty) + set.closeQty) chk = 'over';
   }
   return { po, chem: po?.chem || '', price, amount, billed, rcv, diff, due, pay, chk };
@@ -379,7 +378,7 @@ function poCalc(po, upto) {
   const rem = qty != null && po.poNo ? qty - delivered : null;
   const prog = qty ? delivered / qty : null;
   const remAmt = poAmt != null && po.poNo ? r2(poAmt - delAmt) : null;
-  const unpaid = ds.reduce((s, d) => { const c = delCalc(d); return s + (c.billed != null && c.rcv == null ? c.billed : 0); }, 0);
+  const unpaid = ds.reduce((s, d) => { const c = delCalc(d); return s + (d.invoice && c.billed != null && c.rcv == null ? c.billed : 0); }, 0);
   const next = S.pos.find(p => p.chem === po.chem && N(p.seq) === N(po.seq) + 1);
   const prev = S.pos.find(p => p.chem === po.chem && N(p.seq) === N(po.seq) - 1);
   const prevRem = prev ? poCalc0(prev, upto) : null;
@@ -583,10 +582,6 @@ function alertsList() {
     else if (!hasNext && fc.trigDate && diffDays(fc.trigDate, today) <= 14) out.push({ lv: 'warn', ch, msg: LANG === 'ko' ? `${ch}: ${fd(fc.trigDate)}경 신규 PO 요청 기준 도달 예상` : `${ch}: next-PO trigger expected around ${fd(fc.trigDate)}` });
     if (c.st === 'near' && !hasNext) out.push({ lv: 'warn', ch, msg: LANG === 'ko' ? `${ch} ${po.poNo}: 소진 임박 (잔여 ${fmt(c.rem)} kg)` : `${ch} ${po.poNo}: near completion (${fmt(c.rem)} kg left)` });
   });
-  const od = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'overdue');
-  if (od.length) out.push({ lv: 'bad', msg: LANG === 'ko' ? `연체 입금 ${od.length}건 · ${money(od.reduce((s, x) => s + x.c.billed, 0))}` : `${od.length} overdue payment(s) · ${money(od.reduce((s, x) => s + x.c.billed, 0))}` });
-  const bad = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'over' || x.c.pay === 'short');
-  if (bad.length) out.push({ lv: 'warn', msg: LANG === 'ko' ? `입금 차이 ${bad.length}건` : `${bad.length} payment difference(s)` });
   const chk = S.deliveries.filter(d => delCalc(d).chk !== 'ok');
   if (chk.length) out.push({ lv: 'bad', msg: LANG === 'ko' ? `PO 잔량 체크 오류 ${chk.length}건 (납품 내역 확인)` : `${chk.length} delivery PO check issue(s)` });
   return out;
@@ -600,16 +595,16 @@ function viewDash() {
   const actives = set.chems.map(ch => ({ ch, po: activePO(ch, today) }));
   const remKg = actives.reduce((s, a) => s + (a.po ? poCalc(a.po, today).rem : 0), 0);
   const remAmt = actives.reduce((s, a) => s + (a.po ? N(poCalc(a.po, today).remAmt) : 0), 0);
-  const dc = S.deliveries.map(d => delCalc(d));
-  const unpaid = dc.filter(c => c.pay === 'open' || c.pay === 'overdue').reduce((s, c) => s + c.billed, 0);
-  const overdue = dc.filter(c => c.pay === 'overdue');
+  const actPO = actives.filter(a => a.po).map(a => poCalc(a.po, today));
+  const cumDel = actPO.reduce((s, c) => s + c.delivered, 0), cumQty = actPO.reduce((s, c) => s + N(c.qty), 0);
+  const uninv = S.deliveries.filter(d => !d.invoice && poByNo(d.poNo));
   const wkTot = set.chems.reduce((s, ch) => s + chemWeek(ch, we), 0), wkPrev = set.chems.reduce((s, ch) => s + chemWeek(ch, addDays(we, -7)), 0);
   let h = pageHead(t('dash'), `${LANG === 'ko' ? '기준일' : 'As of'} ${fd(today)} · ${LANG === 'ko' ? '주 마감' : 'week ending'} ${fd(we)}`, `<a class="btn pri" href="#report">▤ ${t('report')}</a>`);
   h += `<div class="kpis">
     <div class="card kpi"><div class="l">${t('activeRem')}</div><div class="v">${fmt(remKg)} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${money(remAmt)}</div></div>
     <div class="card kpi"><div class="l">${t('thisWeek')} ${LANG === 'ko' ? '납품' : 'deliveries'}</div><div class="v">${fmt(wkTot)} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${wkPrev ? `${t('wow')} ${deltaTxt((wkTot - wkPrev) / wkPrev, true)}` : '&nbsp;'}</div></div>
-    <div class="card kpi"><div class="l">${t('unpaidBilled')}</div><div class="v">${money(unpaid)}</div><div class="s">${dc.filter(c => c.pay === 'open' || c.pay === 'overdue').length} ${LANG === 'ko' ? '건' : 'invoices'}</div></div>
-    <div class="card kpi"><div class="l">${t('overdue')}</div><div class="v" style="color:${overdue.length ? 'var(--bad)' : 'inherit'}">${money(overdue.reduce((s, c) => s + c.billed, 0))}</div><div class="s">${overdue.length} ${LANG === 'ko' ? '건' : 'invoices'}</div></div>
+    <div class="card kpi"><div class="l">${t('cumDel')}</div><div class="v">${fmt(cumDel)} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${cumQty ? pct(cumDel / cumQty) + ' / ' + fmt(cumQty) + ' kg' : '&nbsp;'}</div></div>
+    <div class="card kpi"><div class="l">${t('uninvKg')}</div><div class="v">${fmt(uninv.reduce((s, d) => s + N(d.qty), 0))} <small style="font-size:13px;color:var(--text-2)">kg</small></div><div class="s">${uninv.length} ${LANG === 'ko' ? '건 · 인보이스 발행 후 지정' : 'deliveries · assign when invoiced'}</div></div>
   </div>`;
   h += `<div class="chem-grid">${actives.map(a => chemCard(a.ch, a.po, today)).join('')}</div>`;
   const chemsWithPO = actives.filter(a => a.po).map(a => a.ch);
@@ -621,14 +616,16 @@ function viewDash() {
   }
   const al = alertsList();
   h += `<div class="row-eq"><div class="card"><div class="card-h"><h3>${t('alerts')}</h3></div><div class="card-b">${al.length ? al.map(a => `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line-2);font-size:13px"><span class="b ${a.lv}"><i></i>${a.lv === 'bad' ? (LANG === 'ko' ? '조치' : 'Action') : (LANG === 'ko' ? '주의' : 'Watch')}</span><span>${esc(a.msg)}</span></div>`).join('') : `<div class="muted">${t('noAlerts')}</div>`}</div></div>
-    <div class="card"><div class="card-h"><h3>${t('arPanel')}</h3><span class="sp"></span><a class="btn sm" href="#deliv">${t('deliv')} →</a></div><div class="card-b" style="padding-top:8px"><div class="tbl-wrap"><table class="t"><thead><tr><th>${t('invoice')}</th><th class="num">${t('billed')}</th><th>${t('due')}</th><th>${t('settle')}</th></tr></thead><tbody>
-    ${S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(x => x.c.pay === 'open' || x.c.pay === 'overdue').sort((a, b) => (a.c.due || '').localeCompare(b.c.due || '')).slice(0, 8).map(x => `<tr><td>${esc(x.d.invoice)}</td><td class="num">${money(x.c.billed)}</td><td>${fd(x.c.due)}</td><td>${payBadge(x.c.pay)}</td></tr>`).join('') || `<tr><td colspan="4" class="muted">${t('none')}</td></tr>`}
+    <div class="card"><div class="card-h"><h3>${t('recent')}</h3><span class="sp"></span>${can('edit') ? `<button class="btn sm pri" data-act="editDel">＋ ${t('addDel')}</button>` : ''}<a class="btn sm" href="#deliv">${t('deliv')} →</a></div><div class="card-b" style="padding-top:8px"><div class="tbl-wrap"><table class="t"><thead><tr><th>${t('delDate')}</th><th>${t('chem')}</th><th>${t('poNo')}</th><th class="num">${t('kg')}</th><th>${t('invSt')}</th></tr></thead><tbody>
+    ${[...S.deliveries].filter(d => poByNo(d.poNo)).sort((a, b) => dDate(b).localeCompare(dDate(a)) || String(b.id).localeCompare(String(a.id))).slice(0, 8).map(d => `<tr><td>${fd(dDate(d))}</td><td>${chemPill(poByNo(d.poNo).chem)}</td><td>${esc(d.poNo)}</td><td class="num">${fmt(N(d.qty))}</td><td>${invBadge(d)}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${t('none')}</td></tr>`}
     </tbody></table></div></div></div></div>`;
   h += `<div class="card"><div class="card-h"><h3>${LANG === 'ko' ? '전체 PO 현황' : 'All POs'}</h3><span class="sp"></span><a class="btn sm" href="#pos">${t('pos')} →</a></div><div class="card-b" style="padding-top:8px">${poTable(true)}</div></div>`;
   return h;
 }
 AFTER.dash = () => { $$('.tabs button[data-chem]').forEach(b => b.onclick = () => { DASH_CHEM = b.dataset.chem; RERENDER = true; render(); }); };
 function deltaTxt(v, volume) { if (v == null || !isFinite(v)) return '–'; const s = v > 0 ? '▲' : v < 0 ? '▼' : '■'; const cls = volume ? '' : (v < 0 ? 'dn' : 'up'); return `<span class="delta ${cls}">${s} ${Math.abs(v * 100).toFixed(1)}%</span>`; }
+function chemPill(ch) { return ch ? `<span class="b" style="background:${chemColor(ch)}1a;color:${chemColor(ch)}">${esc(ch)}</span>` : ''; }
+function invBadge(d) { return d.invoice ? `<span class="b info"><i></i>${esc(d.invoice)}</span>` : `<span class="b gray"><i></i>${t('uninv')}</span>`; }
 function payBadge(p) { const m = { done: 'good', open: 'info', overdue: 'bad', over: 'warn', short: 'warn' }; return p ? `<span class="b ${m[p]}"><i></i>${t('pay_' + p)}</span>` : ''; }
 function chemCard(ch, po, today) {
   const col = chemColor(ch);
@@ -652,10 +649,10 @@ function chemCard(ch, po, today) {
 function poTable(compact) {
   const today = todayISO();
   const rows = sortedPOs().map(p => ({ p, c: poCalc(p, today) }));
-  return `<div class="tbl-wrap"><table class="t"><thead><tr><th>${t('chem')}</th>${compact ? '' : `<th>${t('seq')}</th>`}<th>${t('poNo')}</th><th>${t('type')}</th>${compact ? '' : `<th>${t('recv')}</th>`}<th class="num">${t('qty')}</th>${compact ? '' : `<th class="num">${LANG === 'ko' ? '단가' : 'Price'}</th>`}<th class="num">${t('delivered')}</th><th class="num">${t('remaining')}</th><th>${t('progress')}</th><th class="num">${t('remAmt')}</th>${compact ? '' : `<th class="num">${t('unpaid')}</th><th>${t('tt')}</th>`}<th>${t('status')}</th>${compact || !can('edit') ? '' : '<th></th>'}</tr></thead><tbody>
+  return `<div class="tbl-wrap"><table class="t"><thead><tr><th>${t('chem')}</th>${compact ? '' : `<th>${t('seq')}</th>`}<th>${t('poNo')}</th><th>${t('type')}</th>${compact ? '' : `<th>${t('recv')}</th>`}<th class="num">${t('qty')}</th>${compact ? '' : `<th class="num">${LANG === 'ko' ? '단가' : 'Price'}</th>`}<th class="num">${t('delivered')}</th><th class="num">${t('remaining')}</th><th>${t('progress')}</th><th class="num">${t('remAmt')}</th><th>${t('status')}</th>${compact || !can('edit') ? '' : '<th></th>'}</tr></thead><tbody>
   ${rows.map(({ p, c }) => `<tr><td><span class="b" style="background:${chemColor(p.chem)}1a;color:${chemColor(p.chem)}">${esc(p.chem)}</span></td>${compact ? '' : `<td>${esc(p.seq)}</td>`}<td><b>${esc(p.poNo || '—')}</b></td><td>${esc(p.type || '')}</td>${compact ? '' : `<td>${fd(p.recv)}</td>`}<td class="num">${fmt(c.qty)}</td>${compact ? '' : `<td class="num">${c.price != null ? '$' + c.price : '–'}</td>`}<td class="num">${fmt(c.delivered)}</td><td class="num"><b>${fmt(c.rem)}</b></td>
   <td style="min-width:120px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:7px;background:#eef0f3;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100, (c.prog || 0) * 100)}%;background:${chemColor(p.chem)}"></div></div><span class="muted" style="font-size:12px;width:40px;text-align:right">${c.prog != null ? pct(c.prog, 0) : ''}</span></div></td>
-  <td class="num">${c.remAmt != null ? money(c.remAmt) : '–'}</td>${compact ? '' : `<td class="num">${c.unpaid ? money(c.unpaid) : ''}</td><td>${esc(p.tt || '')}</td>`}<td>${stBadge(p, c)}</td>${compact || !can('edit') ? '' : `<td style="white-space:nowrap"><button class="btn sm" data-act="editPO" data-id="${p.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delPO" data-id="${p.id}">${t('del')}</button></td>`}</tr>`).join('') || `<tr><td colspan="14" class="muted">${t('none')}</td></tr>`}
+  <td class="num">${c.remAmt != null ? money(c.remAmt) : '–'}</td><td>${stBadge(p, c)}</td>${compact || !can('edit') ? '' : `<td style="white-space:nowrap"><button class="btn sm" data-act="editPO" data-id="${p.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delPO" data-id="${p.id}">${t('del')}</button></td>`}</tr>`).join('') || `<tr><td colspan="14" class="muted">${t('none')}</td></tr>`}
   </tbody></table></div>`;
 }
 function viewPOs() {
@@ -686,51 +683,85 @@ function poForm(p) {
 }
 
 /* ================= Deliveries ================= */
-let DF = { q: '', chem: '', pay: '' };
+/* Delivery is the primary record: delivery date + PO# + qty. Invoice # is optional and is attached later (weekly) — singly or in bulk. */
+let DF = { q: '', chem: '', inv: '', po: '', pay: false };
+const SEL = new Set();
 function viewDeliv() {
-  const rows = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(({ d, c }) => (!DF.chem || c.chem === DF.chem) && (!DF.pay || c.pay === DF.pay) && (!DF.q || `${d.invoice} ${d.poNo} ${d.note}`.toLowerCase().includes(DF.q.toLowerCase()))).sort((a, b) => dDate(b.d).localeCompare(dDate(a.d)) || (b.d.invoice || '').localeCompare(a.d.invoice || ''));
+  const rows = S.deliveries.map(d => ({ d, c: delCalc(d) })).filter(({ d, c }) => (!DF.chem || c.chem === DF.chem) && (!DF.po || d.poNo === DF.po) && (!DF.inv || (DF.inv === 'no' ? !d.invoice : !!d.invoice)) && (!DF.q || `${d.invoice || ''} ${d.poNo} ${d.ref || ''} ${d.note || ''}`.toLowerCase().includes(DF.q.toLowerCase()))).sort((a, b) => dDate(b.d).localeCompare(dDate(a.d)) || String(b.d.id).localeCompare(String(a.d.id)));
+  [...SEL].forEach(id => { if (!S.deliveries.some(d => d.id === id && !d.invoice)) SEL.delete(id); });
+  const ed = can('edit'), P = DF.pay;
   const sum = k => rows.reduce((s, r) => s + N(r.c[k]), 0);
-  let h = pageHead(t('deliv'), LANG === 'ko' ? 'PO 잔량을 넘는 납품은 두 줄로 나눠 (기존 PO 잔량 / 후속 PO) 입력' : 'Split a delivery that exceeds the PO balance into two lines', can('edit') ? `<button class="btn pri" data-act="editDel">＋ ${t('addDel')}</button>` : '');
-  h += `<div class="filters"><input class="inp" id="dfQ" placeholder="${t('search')}" value="${esc(DF.q)}" style="width:220px"><select class="inp" id="dfChem"><option value="">${t('chem')}: ${t('all')}</option>${SET().chems.map(c => `<option ${DF.chem === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inp" id="dfPay"><option value="">${t('settle')}: ${t('all')}</option>${['open', 'overdue', 'done', 'over', 'short'].map(p => `<option value="${p}" ${DF.pay === p ? 'selected' : ''}>${t('pay_' + p)}</option>`).join('')}</select><span class="sp"></span><span class="muted">${rows.length} ${LANG === 'ko' ? '건' : 'rows'}</span></div>`;
-  h += `<div class="card"><div class="tbl-wrap tbl-scroll"><table class="t"><thead><tr><th>${t('invoice')}</th><th>${t('invDate')}</th><th>${t('poNo')}</th><th>${t('chem')}</th><th class="num">${t('kg')}</th><th class="num">${LANG === 'ko' ? '단가' : 'Price'}</th><th class="num">${t('billed')}</th><th class="num">${t('received')}</th><th class="num">${t('diff')}</th><th>${t('delDate')}</th><th>${t('due')}</th><th>${t('settle')}</th><th>${t('check')}</th><th>${t('note')}</th>${can('edit') ? '<th></th>' : ''}</tr></thead><tbody>
-  ${rows.map(({ d, c }) => `<tr><td><b>${esc(d.invoice)}</b></td><td>${fd(d.invDate)}</td><td>${esc(d.poNo)}</td><td>${c.chem ? `<span class="b" style="background:${chemColor(c.chem)}1a;color:${chemColor(c.chem)}">${c.chem}</span>` : ''}</td><td class="num">${fmt(num(d.qty))}</td><td class="num">${c.price != null ? '$' + c.price : ''}</td><td class="num">${money(c.billed)}${N(d.adj) ? `<div class="muted" style="font-size:11px">adj ${d.adj}</div>` : ''}</td><td class="num">${c.rcv != null ? money(c.rcv) : ''}</td><td class="num" style="color:${c.diff ? 'var(--bad)' : 'inherit'}">${c.diff != null ? money(c.diff) : ''}</td><td>${fd(d.delDate)}</td><td>${fd(c.due)}</td><td>${payBadge(c.pay)}</td><td>${c.chk === 'ok' ? '<span class="muted">OK</span>' : `<span class="b bad"><i></i>${t('chk_' + c.chk)}</span>`}</td><td class="muted">${esc(d.note || '')}</td>${can('edit') ? `<td style="white-space:nowrap"><button class="btn sm" data-act="editDel" data-id="${d.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delDel" data-id="${d.id}">${t('del')}</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="15" class="muted">${t('none')}</td></tr>`}
-  </tbody><tfoot><tr><td colspan="4">${t('total')}</td><td class="num">${fmt(rows.reduce((s, r) => s + N(r.d.qty), 0))}</td><td></td><td class="num">${money(sum('billed'))}</td><td class="num">${money(sum('rcv'))}</td><td class="num">${money(sum('diff'))}</td><td colspan="${can('edit') ? 6 : 5}"></td></tr></tfoot></table></div></div>`;
+  const uninvRows = rows.filter(r => !r.d.invoice);
+  let h = pageHead(t('deliv'), LANG === 'ko' ? '납품하면 바로 등록 (인보이스는 발행 후 일괄 지정) · PO 잔량을 넘는 납품은 두 줄로 나눠 입력' : 'Register each delivery right away (attach the invoice later) · split a delivery that exceeds the PO balance into two lines', ed ? `<button class="btn pri" data-act="editDel">＋ ${t('addDel')}</button>` : '');
+  h += `<div class="filters"><input class="inp" id="dfQ" placeholder="${t('search')}" value="${esc(DF.q)}" style="width:200px">
+    <select class="inp" id="dfChem"><option value="">${t('chem')}: ${t('all')}</option>${SET().chems.map(c => `<option ${DF.chem === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+    <select class="inp" id="dfPO"><option value="">PO#: ${t('all')}</option>${sortedPOs().filter(p => p.poNo && (!DF.chem || p.chem === DF.chem)).map(p => `<option value="${esc(p.poNo)}" ${DF.po === p.poNo ? 'selected' : ''}>${esc(p.chem)} · ${esc(p.poNo)}</option>`).join('')}</select>
+    <select class="inp" id="dfInv"><option value="">${t('invSt')}: ${t('all')}</option><option value="no" ${DF.inv === 'no' ? 'selected' : ''}>${t('uninv')}</option><option value="yes" ${DF.inv === 'yes' ? 'selected' : ''}>${t('invd')}</option></select>
+    <label class="chk"><input type="checkbox" id="dfPay" ${P ? 'checked' : ''}>${t('showPayCols')}</label>
+    <span class="sp"></span>${ed && SEL.size ? `<button class="btn pri" id="bulkInv">🧾 ${t('assignInv')} (${SEL.size})</button>` : ''}<span class="muted">${rows.length} ${LANG === 'ko' ? '건' : 'rows'} · ${fmt(rows.reduce((s, r) => s + N(r.d.qty), 0))} kg</span></div>`;
+  const cols = 7 + (P ? 5 : 0) + (ed ? 2 : 0);
+  h += `<div class="card"><div class="tbl-wrap tbl-scroll"><table class="t"><thead><tr>${ed ? `<th style="width:28px"><input type="checkbox" id="selAll" title="${t('uninv')}" ${uninvRows.length && uninvRows.every(r => SEL.has(r.d.id)) ? 'checked' : ''} ${uninvRows.length ? '' : 'disabled'}></th>` : ''}<th>${t('delDate')}</th><th>${t('chem')}</th><th>${t('poNo')}</th><th class="num">${t('kg')}</th><th>${t('refS')}</th><th>${t('invSt')}</th><th>${t('check')}</th>${P ? `<th>${t('invDate')}</th><th class="num">${t('billed')}</th><th class="num">${t('received')}</th><th>${t('due')}</th><th>${t('settle')}</th>` : ''}<th>${t('note')}</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>
+  ${rows.map(({ d, c }) => `<tr>${ed ? `<td>${d.invoice ? '' : `<input type="checkbox" class="selRow" data-id="${esc(d.id)}" ${SEL.has(d.id) ? 'checked' : ''}>`}</td>` : ''}<td><b>${fd(dDate(d))}</b>${!d.delDate && d.invDate ? `<div class="muted" style="font-size:11px">${LANG === 'ko' ? 'Invoice 일자' : 'inv. date'}</div>` : ''}</td><td>${chemPill(c.chem)}</td><td>${esc(d.poNo)}</td><td class="num"><b>${fmt(num(d.qty))}</b></td><td>${esc(d.ref || '')}</td><td>${invBadge(d)}</td><td>${c.chk === 'ok' ? '<span class="muted">OK</span>' : `<span class="b bad"><i></i>${t('chk_' + c.chk)}</span>`}</td>${P ? `<td>${fd(d.invDate)}</td><td class="num">${d.invoice ? money(c.billed) : ''}</td><td class="num">${c.rcv != null ? money(c.rcv) : ''}</td><td>${fd(c.due)}</td><td>${payBadge(c.pay)}</td>` : ''}<td class="muted">${esc(d.note || '')}</td>${ed ? `<td style="white-space:nowrap"><button class="btn sm" data-act="editDel" data-id="${d.id}">${t('edit')}</button> <button class="btn sm danger" data-act="delDel" data-id="${d.id}">${t('del')}</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${cols + 1}" class="muted">${t('none')}</td></tr>`}
+  </tbody><tfoot><tr>${ed ? '<td></td>' : ''}<td colspan="3">${t('total')}</td><td class="num">${fmt(rows.reduce((s, r) => s + N(r.d.qty), 0))}</td><td colspan="3"></td>${P ? `<td></td><td class="num">${money(rows.filter(r => r.d.invoice).reduce((s, r) => s + N(r.c.billed), 0))}</td><td class="num">${money(sum('rcv'))}</td><td colspan="2"></td>` : ''}<td colspan="${ed ? 2 : 1}"></td></tr></tfoot></table></div></div>`;
   return h;
 }
 AFTER.deliv = () => {
   const re = () => { RERENDER = true; render(); };
   $('#dfQ').oninput = e => { DF.q = e.target.value; clearTimeout(window._dq); window._dq = setTimeout(() => { re(); const i = $('#dfQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); };
-  $('#dfChem').onchange = e => { DF.chem = e.target.value; re(); };
-  $('#dfPay').onchange = e => { DF.pay = e.target.value; re(); };
+  $('#dfChem').onchange = e => { DF.chem = e.target.value; DF.po = ''; re(); };
+  $('#dfPO').onchange = e => { DF.po = e.target.value; re(); };
+  $('#dfInv').onchange = e => { DF.inv = e.target.value; re(); };
+  $('#dfPay').onchange = e => { DF.pay = e.target.checked; re(); };
+  $$('.selRow').forEach(c => c.onchange = () => { c.checked ? SEL.add(c.dataset.id) : SEL.delete(c.dataset.id); re(); });
+  const sa = $('#selAll'); if (sa) sa.onchange = () => { $$('.selRow').forEach(c => sa.checked ? SEL.add(c.dataset.id) : SEL.delete(c.dataset.id)); re(); };
+  const b = $('#bulkInv'); if (b) b.onclick = bulkInvoice;
 };
+function bulkInvoice() {
+  const ds = S.deliveries.filter(d => SEL.has(d.id));
+  if (!ds.length) return;
+  const byChem = {}; ds.forEach(d => { const ch = poByNo(d.poNo)?.chem || '?'; byChem[ch] = (byChem[ch] || 0) + N(d.qty); });
+  modal(t('assignInv'), `<div class="infobox" style="margin-bottom:14px">${ds.length} ${LANG === 'ko' ? '건' : 'deliveries'} · ${Object.entries(byChem).map(([c, q]) => `${c} ${fmt(q)} kg`).join(' · ')}<br><span style="font-size:12px">${fd(ds.map(dDate).sort()[0])} – ${fd(ds.map(dDate).sort().pop())}</span></div>
+    <div class="form"><div class="f"><label>${t('invoice')}</label><input class="inp" id="bInv" placeholder="JAIN-261016HF"></div><div class="f"><label>${t('invDate')}</label><input class="inp" id="bDate" type="date" value="${todayISO()}"></div></div>`, async () => {
+    const inv = $('#bInv').value.trim(), dt = $('#bDate').value;
+    if (!inv || !dt) return toast(LANG === 'ko' ? 'Invoice 번호와 일자를 입력하세요' : 'Enter invoice # and date', true), false;
+    await Store.putMany('deliveries', ds.map(d => ({ ...d, invoice: inv, invDate: dt, delDate: d.delDate || dDate(d) })));
+    SEL.clear(); toast(t('savedT')); if (Store !== LocalStore) render();
+  });
+  $('#bInv').addEventListener('input', () => { const m = $('#bInv').value.match(/(\d{2})(\d{2})(\d{2})/); if (m) $('#bDate').value = `20${m[1]}-${m[2]}-${m[3]}`; });
+}
 function delForm(d) {
   const today = todayISO();
-  d = d || { invDate: today };
+  d = d || { delDate: today };
   const opts = sortedPOs().filter(p => p.poNo).map(p => { const c = poCalc(p, '9999-12-31'); return `<option value="${esc(p.poNo)}" ${d.poNo === p.poNo ? 'selected' : ''}>${esc(p.chem)} · ${esc(p.poNo)} — ${LANG === 'ko' ? '잔여' : 'rem.'} ${fmt(c.rem)} kg ${c.isActive ? '' : '(' + t('st_' + c.st) + ')'}</option>`; }).join('');
   const defPO = d.poNo || (sortedPOs().find(p => p.poNo && poCalc(p, '9999-12-31').isActive) || {}).poNo;
+  const hasPay = d.received != null || N(d.adj);
   modal(d.id ? t('edit') : t('addDel'), `<div class="form">
-    <div class="f"><label>${t('invoice')}</label><input class="inp" id="dInv" value="${esc(d.invoice || '')}" placeholder="JAIN-261009HF"></div>
-    <div class="f"><label>${t('invDate')}</label><input class="inp" id="dDate" type="date" value="${esc(d.invDate || '')}"></div>
-    <div class="f full"><label>${t('poNo')}</label><select class="inp" id="dPO">${opts.replace(`value="${esc(defPO)}"`, `value="${esc(defPO)}" selected`)}</select></div>
-    <div class="f"><label>${t('kg')}</label><input class="inp" id="dQty" inputmode="decimal" value="${esc(d.qty ?? '')}"></div>
-    <div class="f"><label>${t('adj')} (±)</label><input class="inp" id="dAdj" inputmode="decimal" value="${esc(d.adj ?? '')}"></div>
+    <div class="f"><label>${t('delDate')} *</label><input class="inp" id="dDel" type="date" value="${esc(d.delDate || d.invDate || '')}"></div>
+    <div class="f"><label>${t('kg')} *</label><input class="inp" id="dQty" inputmode="decimal" value="${esc(d.qty ?? '')}"></div>
+    <div class="f full"><label>${t('poNo')} *</label><select class="inp" id="dPO">${opts.replace(`value="${esc(defPO)}"`, `value="${esc(defPO)}" selected`)}</select></div>
     <div class="f full" id="dCalc"></div>
-    <div class="f"><label>${t('received')}</label><input class="inp" id="dRcv" inputmode="decimal" value="${esc(d.received ?? '')}"><span class="hint">${LANG === 'ko' ? '입금되면 입력' : 'Enter when paid'}</span></div>
-    <div class="f"><label>${t('delDate')}</label><input class="inp" id="dDel" type="date" value="${esc(d.delDate || '')}"><span class="hint">${LANG === 'ko' ? '비우면 Invoice 일자로 주간 집계' : 'If blank, invoice date is used for weekly totals'}</span></div>
-    <div class="f full"><label>${t('note')}</label><input class="inp" id="dNote" value="${esc(d.note || '')}"></div></div>`, async () => {
-    const x = { ...d, invoice: $('#dInv').value.trim(), invDate: $('#dDate').value, poNo: $('#dPO').value, qty: num($('#dQty').value), adj: num($('#dAdj').value), received: num($('#dRcv').value), delDate: $('#dDel').value, note: $('#dNote').value.trim() };
-    if (!x.invoice || !x.invDate || !x.poNo || x.qty == null) return toast(LANG === 'ko' ? 'Invoice, 일자, PO#, 수량은 필수입니다' : 'Invoice, date, PO# and qty are required', true), false;
-    if (S.deliveries.some(y => y.id !== x.id && y.invoice === x.invoice && y.poNo === x.poNo)) return toast(LANG === 'ko' ? '같은 Invoice/PO# 행이 이미 있습니다' : 'Duplicate invoice/PO# row', true), false;
+    <div class="f"><label>${t('ref')}</label><input class="inp" id="dRef" value="${esc(d.ref || '')}"></div>
+    <div class="f"><label>${t('note')}</label><input class="inp" id="dNote" value="${esc(d.note || '')}"></div>
+    <div class="f"><label>${t('invoice')} <span class="muted">(${LANG === 'ko' ? '선택 · 발행 후 입력' : 'optional · add when issued'})</span></label><input class="inp" id="dInv" value="${esc(d.invoice || '')}" placeholder="${LANG === 'ko' ? '비워두면 미청구' : 'blank = not invoiced'}"></div>
+    <div class="f"><label>${t('invDate')}</label><input class="inp" id="dDate" type="date" value="${esc(d.invDate || '')}"></div>
+    <details class="f full" ${hasPay ? 'open' : ''}><summary style="cursor:pointer;font-size:12px;color:var(--text-2)">${LANG === 'ko' ? '금액 조정 · 입금 (선택)' : 'Adjustment · payment (optional)'}</summary>
+      <div class="form" style="margin-top:10px"><div class="f"><label>${t('adj')} (±)</label><input class="inp" id="dAdj" inputmode="decimal" value="${esc(d.adj ?? '')}"></div><div class="f"><label>${t('received')}</label><input class="inp" id="dRcv" inputmode="decimal" value="${esc(d.received ?? '')}"></div></div></details>
+    </div>`, async () => {
+    const x = { ...d, delDate: $('#dDel').value, poNo: $('#dPO').value, qty: num($('#dQty').value), ref: $('#dRef').value.trim(), note: $('#dNote').value.trim(), invoice: $('#dInv').value.trim(), invDate: $('#dDate').value, adj: num($('#dAdj').value), received: num($('#dRcv').value) };
+    if (!x.delDate || !x.poNo || x.qty == null) return toast(LANG === 'ko' ? '납품일, PO#, 수량은 필수입니다' : 'Delivery date, PO# and qty are required', true), false;
+    if (x.invoice && !x.invDate) x.invDate = x.delDate;
+    if (!x.invoice) x.invDate = '';
+    if (x.ref && S.deliveries.some(y => y.id !== x.id && y.ref === x.ref && y.poNo === x.poNo) && !confirm(LANG === 'ko' ? '같은 출하 참조/PO#로 등록된 납품이 있습니다. 그래도 저장할까요?' : 'A delivery with the same ship ref./PO# exists. Save anyway?')) return false;
     await Store.put('deliveries', x); toast(t('savedT'));
   });
   const upd = () => {
     const po = poByNo($('#dPO').value); if (!po) { $('#dCalc').innerHTML = ''; return; }
     const q = N($('#dQty').value), c = poCalc(po, '9999-12-31'); const own = d.id && d.poNo === po.poNo ? N(d.qty) : 0;
-    const remAfter = c.rem + own - q, amt = r2(q * N(po.price)) + N($('#dAdj').value);
-    $('#dCalc').innerHTML = `<div class="${remAfter < -SET().closeQty ? 'errbox' : 'infobox'}">${t('price')}: <b>$${po.price ?? '–'}</b> · ${t('billed')}: <b>${money(amt)}</b> · ${LANG === 'ko' ? '납품 후 PO 잔량' : 'PO balance after'}: <b>${fmt(remAfter)} kg</b>${remAfter < -SET().closeQty ? `<br>${LANG === 'ko' ? `PO 잔량 초과 — ${fmt(c.rem + own)} kg만 이 PO로, 나머지는 후속 PO로 한 줄 더 입력하세요` : `Exceeds balance — enter ${fmt(c.rem + own)} kg here and the rest on the next PO`}` : ''}</div>`;
+    const remAfter = c.rem + own - q;
+    $('#dCalc').innerHTML = `<div class="${remAfter < -SET().closeQty ? 'errbox' : 'infobox'}">${LANG === 'ko' ? 'PO 수량' : 'PO qty'} <b>${fmt(c.qty)} kg</b> · ${LANG === 'ko' ? '현재 잔량' : 'balance now'} <b>${fmt(c.rem + own)} kg</b> → ${LANG === 'ko' ? '납품 후' : 'after'} <b>${fmt(remAfter)} kg</b> (${pct(c.qty ? remAfter / c.qty : null)})${remAfter < -SET().closeQty ? `<br>${LANG === 'ko' ? `PO 잔량 초과 — ${fmt(c.rem + own)} kg만 이 PO로, 나머지는 후속 PO로 한 줄 더 입력하세요` : `Exceeds balance — enter ${fmt(c.rem + own)} kg here and the rest on the next PO`}` : ''}</div>`;
   };
-  ['#dPO', '#dQty', '#dAdj'].forEach(s => $(s).addEventListener('input', upd)); upd();
-  $('#dInv').addEventListener('input', () => { const m = $('#dInv').value.match(/(\d{2})(\d{2})(\d{2})/); if (m && !d.id) $('#dDate').value = `20${m[1]}-${m[2]}-${m[3]}`; });
+  ['#dPO', '#dQty'].forEach(s => $(s).addEventListener('input', upd)); upd();
+  $('#dInv').addEventListener('input', () => { const m = $('#dInv').value.match(/(\d{2})(\d{2})(\d{2})/); if (m && !$('#dDate').value) $('#dDate').value = `20${m[1]}-${m[2]}-${m[3]}`; });
 }
 
 /* ================= modal & actions ================= */
@@ -841,7 +872,7 @@ function reportHTML(we, opt) {
   const allPOs = sortedPOs().filter(p => p.poNo);
   p2 += `<div class="r-sec"><h2>${rt('allPO', L)}</h2><table class="rt"><thead><tr><th>${rt('chem', L)}</th><th>${rt('po', L)}</th><th>${rt('type', L)}</th><th class="num">${rt('poQty', L)}</th><th class="num">${rt('delivered', L)}</th><th class="num">${rt('remaining', L)}</th><th class="num">${rt('prog', L)}</th>${opt.price ? `<th class="num">${L === 'ko' ? '잔여금액' : 'Remaining $'}</th>` : ''}<th>${rt('st', L)}</th></tr></thead><tbody>${allPOs.map(p => { const c = poCalc(p, we); return `<tr><td><b style="color:${chemColor(p.chem)}">${esc(p.chem)}</b></td><td>${esc(p.poNo)}</td><td>${esc(p.type || '')}</td><td class="num">${fmt(c.qty)}</td><td class="num">${fmt(c.delivered)}</td><td class="num"><b>${fmt(c.rem)}</b></td><td class="num">${pct(c.prog)}</td>${opt.price ? `<td class="num">${money(c.remAmt)}</td>` : ''}<td>${stTextR(p, c, L)}</td></tr>`; }).join('')}</tbody></table></div>`;
   const wkDels = S.deliveries.filter(d => dDate(d) >= from && dDate(d) <= we && poByNo(d.poNo)).sort((a, b) => dDate(a).localeCompare(dDate(b)));
-  p2 += `<div class="r-sec"><h2>${rt('weekDel', L)} · ${fd(from, L, true)} – ${fd(we, L, true)}</h2>${wkDels.length ? `<table class="rt"><thead><tr><th>${rt('date', L)}</th><th>${rt('inv', L)}</th><th>${rt('chem', L)}</th><th>${rt('po', L)}</th><th class="num">${rt('qty', L)}</th>${opt.price ? `<th class="num">${rt('amt', L)}</th>` : ''}</tr></thead><tbody>${wkDels.map(d => { const c = delCalc(d); return `<tr><td>${fd(dDate(d), L)}</td><td>${esc(d.invoice)}</td><td>${esc(c.chem)}</td><td>${esc(d.poNo)}</td><td class="num">${fmt(N(d.qty))}</td>${opt.price ? `<td class="num">${money(c.billed)}</td>` : ''}</tr>`; }).join('')}</tbody><tfoot><tr><td colspan="4">${L === 'ko' ? '합계' : 'Total'}</td><td class="num">${fmt(wkDels.reduce((s, d) => s + N(d.qty), 0))}</td>${opt.price ? `<td class="num">${money(wkDels.reduce((s, d) => s + N(delCalc(d).billed), 0))}</td>` : ''}</tr></tfoot></table>` : `<div class="r-notes muted">${rt('none', L)}</div>`}</div>`;
+  p2 += `<div class="r-sec"><h2>${rt('weekDel', L)} · ${fd(from, L, true)} – ${fd(we, L, true)}</h2>${wkDels.length ? `<table class="rt"><thead><tr><th>${rt('date', L)}</th><th>${rt('inv', L)}</th><th>${rt('chem', L)}</th><th>${rt('po', L)}</th><th class="num">${rt('qty', L)}</th>${opt.price ? `<th class="num">${rt('amt', L)}</th>` : ''}</tr></thead><tbody>${wkDels.map(d => { const c = delCalc(d); return `<tr><td>${fd(dDate(d), L)}</td><td>${esc(d.invoice || '–')}</td><td>${esc(c.chem)}</td><td>${esc(d.poNo)}</td><td class="num">${fmt(N(d.qty))}</td>${opt.price ? `<td class="num">${money(c.billed)}</td>` : ''}</tr>`; }).join('')}</tbody><tfoot><tr><td colspan="4">${L === 'ko' ? '합계' : 'Total'}</td><td class="num">${fmt(wkDels.reduce((s, d) => s + N(d.qty), 0))}</td>${opt.price ? `<td class="num">${money(wkDels.reduce((s, d) => s + N(delCalc(d).billed), 0))}</td>` : ''}</tr></tfoot></table>` : `<div class="r-notes muted">${rt('none', L)}</div>`}</div>`;
   if (opt.pay) {
     const open = S.deliveries.filter(d => d.invDate && d.invDate <= we).map(d => ({ d, c: delCalc(d) })).filter(x => x.c.billed != null && (x.c.rcv == null || x.d.invDate >= addDays(we, -27))).sort((a, b) => a.d.invDate.localeCompare(b.d.invDate));
     p2 += `<div class="r-sec"><h2>${rt('pay', L)}</h2><table class="rt"><thead><tr><th>${rt('inv', L)}</th><th>${rt('date', L)}</th><th class="num">${rt('amt', L)}</th><th>${rt('due', L)}</th><th class="num">${rt('paid', L)}</th><th>${rt('st', L)}</th></tr></thead><tbody>${open.map(x => `<tr><td>${esc(x.d.invoice)}</td><td>${fd(x.d.invDate, L)}</td><td class="num">${money(x.c.billed)}</td><td>${fd(x.c.due, L)}</td><td class="num">${x.c.rcv != null ? money(x.c.rcv) : '–'}</td><td>${{ done: L === 'ko' ? '입금 완료' : 'Paid', open: L === 'ko' ? '입금 예정' : 'Open', overdue: L === 'ko' ? '기한 경과' : 'Past due', over: L === 'ko' ? '과입금' : 'Overpaid', short: L === 'ko' ? '부족입금' : 'Short paid' }[x.c.pay] || ''}</td></tr>`).join('')}</tbody></table></div>`;
@@ -964,7 +995,7 @@ async function importExcel(file) {
     const pos = [];
     for (let i = 4; i < pm.length; i++) { const r = pm[i] || []; const chem = r[1] && String(r[1]).trim(); if (!chem) continue; const poNo = r[3] != null ? String(r[3]).trim() : ''; const qty = num(r[6]); if (!poNo && !qty) continue; pos.push({ id: uid(), chem, seq: N(r[2]) || 1, poNo, type: r[4] || '', recv: serialISO(r[5]), qty, price: num(r[7]), carry: N(r[8]), tt: num(r[9]), note: r[10] || '', manual: r[11] || '' }); }
     const dels = [];
-    for (let i = 4; i < dl.length; i++) { const r = dl[i] || []; if (String(r[0] || '').toUpperCase() === 'TOTAL') break; if (!r[1] && !r[3] && r[5] == null) continue; dels.push({ id: uid(), invoice: r[1] ? String(r[1]).trim() : '', invDate: serialISO(r[2]), poNo: r[3] != null ? String(r[3]).trim() : '', qty: num(r[5]), adj: num(r[8]), received: num(r[10]), delDate: serialISO(r[12]), note: r[14] || '' }); }
+    for (let i = 4; i < dl.length; i++) { const r = dl[i] || []; if (String(r[0] || '').toUpperCase() === 'TOTAL') break; if (!r[1] && !r[3] && r[5] == null) continue; dels.push({ id: uid(), invoice: r[1] ? String(r[1]).trim() : '', invDate: serialISO(r[2]), poNo: r[3] != null ? String(r[3]).trim() : '', qty: num(r[5]), adj: num(r[8]), received: num(r[10]), delDate: serialISO(r[12]) || serialISO(r[2]), note: r[14] || '' }); }
     let setPatch = {};
     if (st) { const val = lbl => { const row = st.find(r => r && r[0] && String(r[0]).includes(lbl)); return row ? num(row[1]) : null; }; const tt = st.findIndex(r => r && String(r[0] || '').includes('T/T')); setPatch = { closeQty: val('소진 판정') ?? 0, nearQty: val('소진 임박') ?? 37500, payTol: val('입금 차이') ?? 0.05, trig: { HF: val('— HF'), HCl: val('— HCl'), HNO3: val('— HNO3') } }; if (tt >= 0 && st[tt + 1]) setPatch.ttDefault = num(st[tt + 1][1]) || 30; }
     if (!confirm(`${t('importConfirm')}\n\nPO ${pos.length} · ${LANG === 'ko' ? '납품' : 'deliveries'} ${dels.length}`)) return;
@@ -982,8 +1013,8 @@ async function exportExcel() {
     const today = todayISO();
     const po = [['Chemical', 'Seq', 'PO#', 'PO type', 'PO received', 'PO qty (kg)', 'Unit price', 'Carry-over (kg)', 'T/T', 'Note', 'Manual status', 'PO amount', 'Delivered (kg)', 'Remaining (kg)', 'Progress', 'Remaining $', 'Unpaid $', 'Next PO#', 'Status', 'Est. completion']];
     sortedPOs().forEach(p => { const c = poCalc(p, today), fc = p.poNo && c.isActive ? forecast(p, today) : {}; po.push([p.chem, p.seq, p.poNo, p.type, p.recv, c.qty, c.price, N(p.carry), p.tt, p.note, p.manual, c.poAmt, c.delivered, c.rem, c.prog, c.remAmt, c.unpaid, c.next?.poNo || '', t('st_' + c.st) || p.manual, fc.done || '']); });
-    const dl = [['JNF Invoice', 'Invoice date', 'PO#', 'Chemical', 'Qty (kg)', 'Unit price', 'Amount', 'Adj.', 'Billed', 'Received', 'Diff', 'Delivery date', 'Due date', 'Note', 'Payment', 'PO check']];
-    [...S.deliveries].sort((a, b) => dDate(a).localeCompare(dDate(b))).forEach(d => { const c = delCalc(d); dl.push([d.invoice, d.invDate, d.poNo, c.chem, num(d.qty), c.price, c.amount, num(d.adj), c.billed, c.rcv, c.diff, d.delDate, c.due, d.note, c.pay ? t('pay_' + c.pay) : '', t('chk_' + c.chk)]); });
+    const dl = [['Delivery date', 'Chemical', 'PO#', 'Qty (kg)', 'Ship ref.', 'PO check', 'JNF Invoice', 'Invoice date', 'Unit price', 'Amount', 'Adj.', 'Billed', 'Received', 'Diff', 'Due date', 'Payment', 'Note']];
+    [...S.deliveries].sort((a, b) => dDate(a).localeCompare(dDate(b))).forEach(d => { const c = delCalc(d); dl.push([dDate(d), c.chem, d.poNo, num(d.qty), d.ref || '', t('chk_' + c.chk), d.invoice || '', d.invDate || '', c.price, c.amount, num(d.adj), d.invoice ? c.billed : null, c.rcv, c.diff, c.due, c.pay ? t('pay_' + c.pay) : '', d.note]); });
     const wb = XLSX.utils.book_new();
     const w1 = XLSX.utils.aoa_to_sheet(po), w2 = XLSX.utils.aoa_to_sheet(dl);
     w1['!cols'] = po[0].map(() => ({ wch: 15 })); w2['!cols'] = dl[0].map(() => ({ wch: 15 }));
@@ -1126,7 +1157,5 @@ function passBoot() {
 document.documentElement.lang = LANG;
 if (CLOUD) (PASS_MODE ? passBoot() : cloudBoot()); else LocalStore.init().then(render);
 </script>
-<style>.ytk-copyright{text-align:center;font-size:11px;line-height:1.4;color:#8a8f98;padding:10px 12px;font-family:inherit}@media print{.ytk-copyright{display:none}}</style>
-<div class="ytk-copyright">© 2025–2026 Young Tai Kang. All rights reserved. Unauthorized use, copying, modification, or distribution without the written permission of Young Tai Kang is prohibited.</div>
 </body>
 </html>
